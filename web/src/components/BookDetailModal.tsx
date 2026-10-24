@@ -10,8 +10,6 @@ import {
   BookOpen,
   Download,
   FolderOpen,
-  Mail,
-  Share2,
 } from "lucide-react";
 import { BookDetail } from "@/lib/db";
 
@@ -27,14 +25,11 @@ export function BookDetailModal({ book, onClose }: BookDetailModalProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [openingApp, setOpeningApp] = useState(false);
   const [openStatus, setOpenStatus] = useState<string | null>(null);
-  const [sharingEmail, setSharingEmail] = useState(false);
-  const [emailStatus, setEmailStatus] = useState<string | null>(null);
 
   useEffect(() => {
     if (!book) {
       setFullDetail(null);
       setOpenStatus(null);
-      setEmailStatus(null);
       return;
     }
     setActiveTab("summary");
@@ -80,69 +75,6 @@ export function BookDetailModal({ book, onClose }: BookDetailModalProps) {
     } finally {
       setOpeningApp(false);
     }
-  };
-
-  const handleShareEmail = () => {
-    if (!book) return;
-    setSharingEmail(true);
-    setEmailStatus("Descargando borrador con el EPUB adjunto...");
-
-    // Descarga directa del archivo .eml al dispositivo local del usuario
-    const downloadUrl = `/api/books/${encodeURIComponent(book.id)}/email`;
-    const link = document.createElement("a");
-    link.href = downloadUrl;
-    link.download = `${book.title || "libro"}.eml`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    setTimeout(() => {
-      setSharingEmail(false);
-      setEmailStatus("Borrador descargado en tu equipo. Ábrelo para enviar con tu app de correo.");
-      setTimeout(() => setEmailStatus(null), 7000);
-    }, 600);
-  };
-
-  const handleShareEmailServer = async () => {
-    if (!book) return;
-    setSharingEmail(true);
-    setEmailStatus("Abriendo Mail en el servidor...");
-    try {
-      const res = await fetch(`/api/books/${encodeURIComponent(book.id)}/email`, {
-        method: "POST",
-      });
-      const data = await res.json();
-      if (data.success) {
-        setEmailStatus("Borrador abierto en Mail del servidor Mac");
-      } else {
-        setEmailStatus("No se pudo abrir Mail en el servidor");
-      }
-    } catch {
-      setEmailStatus("Error de conexión con el servidor");
-    } finally {
-      setSharingEmail(false);
-      setTimeout(() => setEmailStatus(null), 5000);
-    }
-  };
-
-  const handleShareGmailWeb = () => {
-    if (!book) return;
-    // Descarga automática del archivo para poder arrastrarlo
-    window.open(`/api/books/${encodeURIComponent(book.id)}/download`, "_blank");
-
-    const subject = encodeURIComponent(`Libro EPUB: ${book.title} — ${book.author}`);
-    const summaryText = book.summary ? `\n\nResumen:\n${book.summary}` : "";
-    const catsText = book.categories?.length ? `\nCategorías: ${book.categories.join(", ")}` : "";
-    const yearText = book.year ? `\nAño: ${book.year}` : "";
-    const body = encodeURIComponent(
-      `Hola,\n\nTe comparto el libro "${book.title}" de ${book.author}.\n\n` +
-      `Ficha del libro:` +
-      yearText +
-      catsText +
-      summaryText +
-      `\n\n(He descargado el archivo EPUB para adjuntarlo a este correo arrastrándolo)`
-    );
-    window.open(`https://mail.google.com/mail/?view=cm&fs=1&su=${subject}&body=${body}`, "_blank");
   };
 
   return (
@@ -387,7 +319,7 @@ export function BookDetailModal({ book, onClose }: BookDetailModalProps) {
                   </div>
                 </div>
 
-                {/* Botones para acceder al libro y compartir por email */}
+                {/* Botones de acción del libro */}
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "0.85rem", alignItems: "center" }}>
                   {/* Abrir en lector del sistema (macOS open) */}
                   <button
@@ -424,70 +356,6 @@ export function BookDetailModal({ book, onClose }: BookDetailModalProps) {
                     <FolderOpen size={16} />
                     <span>Mostrar en Finder</span>
                   </button>
-
-                  {/* Compartir por Email con archivo adjunto (abre en el cliente local del usuario) */}
-                  <button
-                    onClick={handleShareEmail}
-                    disabled={sharingEmail}
-                    className="btn btn-secondary"
-                    style={{
-                      padding: "0.75rem 1.4rem",
-                      fontSize: "0.88rem",
-                      background: "rgba(99, 102, 241, 0.16)",
-                      borderColor: "rgba(99, 102, 241, 0.45)",
-                      color: "#c7d2fe",
-                    }}
-                    title="Descarga el borrador .eml con el archivo EPUB adjunto para abrirlo en la aplicación de correo de este ordenador"
-                  >
-                    {sharingEmail ? (
-                      <>
-                        <div style={{ width: "15px", height: "15px", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
-                        <span>Preparando...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Mail size={16} style={{ color: "var(--accent-primary)" }} />
-                        <span>Email con EPUB adjunto</span>
-                      </>
-                    )}
-                  </button>
-
-                  {/* Alternativa Gmail Web */}
-                  <button
-                    onClick={handleShareGmailWeb}
-                    className="btn btn-secondary"
-                    style={{
-                      padding: "0.75rem 1.15rem",
-                      fontSize: "0.82rem",
-                      background: "rgba(255, 255, 255, 0.04)",
-                    }}
-                    title="Abre Gmail en el navegador y descarga el EPUB para que puedas arrastrarlo"
-                  >
-                    <span>Abrir en Gmail Web</span>
-                  </button>
-
-                  {/* Opción Servidor: Abrir en Mail del servidor Mac */}
-                  <button
-                    onClick={handleShareEmailServer}
-                    disabled={sharingEmail}
-                    className="btn btn-secondary"
-                    style={{
-                      padding: "0.75rem 1rem",
-                      fontSize: "0.82rem",
-                      background: "rgba(255, 255, 255, 0.03)",
-                      color: "var(--text-muted)",
-                    }}
-                    title="Abre un borrador directamente en la app Mail instalada en el servidor Mac"
-                  >
-                    <span>Abrir en Mail del Servidor</span>
-                  </button>
-
-                  {emailStatus && (
-                    <span className="pill-tag" style={{ background: "rgba(16, 185, 129, 0.2)", color: "#6ee7b7", padding: "0.45rem 0.9rem" }}>
-                      <Check size={14} />
-                      <span>{emailStatus}</span>
-                    </span>
-                  )}
                 </div>
 
                 {/* Hash & Date info */}
@@ -531,25 +399,6 @@ export function BookDetailModal({ book, onClose }: BookDetailModalProps) {
               <Download size={15} />
               <span>Descargar</span>
             </a>
-            <button
-              onClick={handleShareEmail}
-              disabled={sharingEmail}
-              className="btn btn-secondary btn-sm"
-              style={{ padding: "0.6rem 1.2rem" }}
-              title="Descarga el borrador .eml con el archivo EPUB adjunto para tu aplicación de correo local"
-            >
-              {sharingEmail ? (
-                <>
-                  <div style={{ width: "13px", height: "13px", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
-                  <span>Adjuntando...</span>
-                </>
-              ) : (
-                <>
-                  <Mail size={15} />
-                  <span>Email con adjunto</span>
-                </>
-              )}
-            </button>
           </div>
 
           <button onClick={onClose} className="btn btn-secondary btn-sm" style={{ padding: "0.6rem 1.2rem" }}>
