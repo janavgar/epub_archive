@@ -82,29 +82,46 @@ export function BookDetailModal({ book, onClose }: BookDetailModalProps) {
     }
   };
 
-  const handleShareEmail = async () => {
+  const handleShareEmail = () => {
     if (!book) return;
     setSharingEmail(true);
+    setEmailStatus("Descargando borrador con el EPUB adjunto...");
+
+    // Descarga directa del archivo .eml al dispositivo local del usuario
+    const downloadUrl = `/api/books/${encodeURIComponent(book.id)}/email`;
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.download = `${book.title || "libro"}.eml`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    setTimeout(() => {
+      setSharingEmail(false);
+      setEmailStatus("Borrador descargado en tu equipo. Ábrelo para enviar con tu app de correo.");
+      setTimeout(() => setEmailStatus(null), 7000);
+    }, 600);
+  };
+
+  const handleShareEmailServer = async () => {
+    if (!book) return;
+    setSharingEmail(true);
+    setEmailStatus("Abriendo Mail en el servidor...");
     try {
       const res = await fetch(`/api/books/${encodeURIComponent(book.id)}/email`, {
         method: "POST",
       });
       const data = await res.json();
       if (data.success) {
-        setEmailStatus("Borrador creado en Mail con el EPUB adjunto");
-        setTimeout(() => setEmailStatus(null), 4000);
+        setEmailStatus("Borrador abierto en Mail del servidor Mac");
       } else {
-        // Fallback: descargar borrador .eml
-        window.open(`/api/books/${encodeURIComponent(book.id)}/email`, "_blank");
-        setEmailStatus("Borrador descargado con el archivo adjunto");
-        setTimeout(() => setEmailStatus(null), 4000);
+        setEmailStatus("No se pudo abrir Mail en el servidor");
       }
     } catch {
-      window.open(`/api/books/${encodeURIComponent(book.id)}/email`, "_blank");
-      setEmailStatus("Borrador descargado con el archivo adjunto");
-      setTimeout(() => setEmailStatus(null), 4000);
+      setEmailStatus("Error de conexión con el servidor");
     } finally {
       setSharingEmail(false);
+      setTimeout(() => setEmailStatus(null), 5000);
     }
   };
 
@@ -408,7 +425,7 @@ export function BookDetailModal({ book, onClose }: BookDetailModalProps) {
                     <span>Mostrar en Finder</span>
                   </button>
 
-                  {/* Compartir por Email con archivo adjunto */}
+                  {/* Compartir por Email con archivo adjunto (abre en el cliente local del usuario) */}
                   <button
                     onClick={handleShareEmail}
                     disabled={sharingEmail}
@@ -420,12 +437,12 @@ export function BookDetailModal({ book, onClose }: BookDetailModalProps) {
                       borderColor: "rgba(99, 102, 241, 0.45)",
                       color: "#c7d2fe",
                     }}
-                    title="Abre un borrador en Mail con el archivo EPUB adjunto"
+                    title="Descarga el borrador .eml con el archivo EPUB adjunto para abrirlo en la aplicación de correo de este ordenador"
                   >
                     {sharingEmail ? (
                       <>
                         <div style={{ width: "15px", height: "15px", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
-                        <span>Adjuntando...</span>
+                        <span>Preparando...</span>
                       </>
                     ) : (
                       <>
@@ -449,21 +466,21 @@ export function BookDetailModal({ book, onClose }: BookDetailModalProps) {
                     <span>Abrir en Gmail Web</span>
                   </button>
 
-                  {/* Descargar borrador .eml */}
-                  <a
-                    href={`/api/books/${encodeURIComponent(book.id)}/email`}
-                    download
+                  {/* Opción Servidor: Abrir en Mail del servidor Mac */}
+                  <button
+                    onClick={handleShareEmailServer}
+                    disabled={sharingEmail}
                     className="btn btn-secondary"
                     style={{
                       padding: "0.75rem 1rem",
                       fontSize: "0.82rem",
-                      background: "rgba(255, 255, 255, 0.04)",
-                      textDecoration: "none",
+                      background: "rgba(255, 255, 255, 0.03)",
+                      color: "var(--text-muted)",
                     }}
-                    title="Descargar archivo .eml con el EPUB adjunto"
+                    title="Abre un borrador directamente en la app Mail instalada en el servidor Mac"
                   >
-                    <span>Descargar .eml</span>
-                  </a>
+                    <span>Abrir en Mail del Servidor</span>
+                  </button>
 
                   {emailStatus && (
                     <span className="pill-tag" style={{ background: "rgba(16, 185, 129, 0.2)", color: "#6ee7b7", padding: "0.45rem 0.9rem" }}>
@@ -519,7 +536,7 @@ export function BookDetailModal({ book, onClose }: BookDetailModalProps) {
               disabled={sharingEmail}
               className="btn btn-secondary btn-sm"
               style={{ padding: "0.6rem 1.2rem" }}
-              title="Abre un borrador en Mail con el archivo EPUB adjunto"
+              title="Descarga el borrador .eml con el archivo EPUB adjunto para tu aplicación de correo local"
             >
               {sharingEmail ? (
                 <>

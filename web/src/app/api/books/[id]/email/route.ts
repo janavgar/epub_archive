@@ -123,13 +123,15 @@ export async function GET(
 
     const fileName = path.basename(filePath);
     const emlContent = buildEml(book, filePath);
-    const emlName = `${path.parse(fileName).name}.eml`;
+    const baseName = path.parse(fileName).name;
+    const safeAscii = baseName.replace(/[^\w.-]/g, "_") + ".eml";
+    const utf8Name = encodeURIComponent(`${baseName}.eml`);
 
     return new NextResponse(emlContent, {
       status: 200,
       headers: {
         "Content-Type": "message/rfc822",
-        "Content-Disposition": `attachment; filename="${encodeURIComponent(emlName)}"`,
+        "Content-Disposition": `attachment; filename="${safeAscii}"; filename*=UTF-8''${utf8Name}`,
       },
     });
   } catch (error: any) {
