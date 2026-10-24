@@ -1,0 +1,2 @@
+[console_scripts]
+epub-archive = epub_archive.cli:main

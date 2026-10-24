@@ -1,0 +1,17 @@
+README.md
+pyproject.toml
+src/epub_archive/__init__.py
+src/epub_archive/__main__.py
+src/epub_archive/ai.py
+src/epub_archive/chunking.py
+src/epub_archive/cli.py
+src/epub_archive/epub.py
+src/epub_archive/pipeline.py
+src/epub_archive/storage.py
+src/epub_archive.egg-info/PKG-INFO
+src/epub_archive.egg-info/SOURCES.txt
+src/epub_archive.egg-info/dependency_links.txt
+src/epub_archive.egg-info/entry_points.txt
+src/epub_archive.egg-info/requires.txt
+src/epub_archive.egg-info/top_level.txt
+tests/test_chunking.py

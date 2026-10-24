@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.epubarchive.web</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/josea./Sistema/epub_archive/web/start-web.sh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/josea./Sistema/epub_archive/web</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/josea./Sistema/epub_archive/.epub_archive/web-service.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/josea./Sistema/epub_archive/.epub_archive/web-service-error.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>PORT</key>
+        <string>3002</string>
+        <key>NODE_ENV</key>
+        <string>production</string>
+        <key>HOME</key>
+        <string>/Users/josea.</string>
+    </dict>
+</dict>
+</plist>
