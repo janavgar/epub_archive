@@ -72,23 +72,53 @@ export function BookDetailModal({ book, onClose }: BookDetailModalProps) {
     }
   };
 
-  const handleShareEmail = () => {
+  const [sharingEmail, setSharingEmail] = useState(false);
+  const [emailStatus, setEmailStatus] = useState<string | null>(null);
+
+  const handleShareEmail = async () => {
     if (!book) return;
+    setSharingEmail(true);
+    try {
+      const res = await fetch(`/api/books/${encodeURIComponent(book.id)}/email`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (data.success) {
+        setEmailStatus("Borrador creado en Mail con el EPUB adjunto");
+        setTimeout(() => setEmailStatus(null), 4000);
+      } else {
+        // Fallback: descargar borrador .eml
+        window.open(`/api/books/${encodeURIComponent(book.id)}/email`, "_blank");
+        setEmailStatus("Borrador descargado con el archivo adjunto");
+        setTimeout(() => setEmailStatus(null), 4000);
+      }
+    } catch {
+      window.open(`/api/books/${encodeURIComponent(book.id)}/email`, "_blank");
+      setEmailStatus("Borrador descargado con el archivo adjunto");
+      setTimeout(() => setEmailStatus(null), 4000);
+    } finally {
+      setSharingEmail(false);
+    }
+  };
+
+  const handleShareGmailWeb = () => {
+    if (!book) return;
+    // Descarga automática del archivo para poder arrastrarlo
+    window.open(`/api/books/${encodeURIComponent(book.id)}/download`, "_blank");
+
     const subject = encodeURIComponent(`Libro EPUB: ${book.title} — ${book.author}`);
     const summaryText = book.summary ? `\n\nResumen:\n${book.summary}` : "";
     const catsText = book.categories?.length ? `\nCategorías: ${book.categories.join(", ")}` : "";
     const yearText = book.year ? `\nAño: ${book.year}` : "";
     const body = encodeURIComponent(
-      `Hola,\n\nTe comparto la referencia de este libro de mi archivo digital:\n\n` +
-      `• Título: ${book.title}\n` +
-      `• Autor: ${book.author}` +
+      `Hola,\n\nTe comparto el libro "${book.title}" de ${book.author}.\n\n` +
+      `Ficha del libro:` +
       yearText +
       catsText +
-      `\n• Ubicación local: ${book.id}` +
       summaryText +
-      `\n\n---\nGenerado desde EPUB Archive AI Pipeline`
+      `\n\n(He descargado el archivo EPUB para adjuntarlo a este correo arrastrándolo)`
     );
-    window.location.href = `mailto:?subject=${subject}&body=${body}`;
+    window.open(`https://mail.google.com/mail/?view=cm&fs=1&su=${subject}&body=${body}`, "_blank");
   };
 
   return (
@@ -371,27 +401,67 @@ export function BookDetailModal({ book, onClose }: BookDetailModalProps) {
                     <span>Mostrar en Finder</span>
                   </button>
 
-                  {/* Compartir por Email */}
+                  {/* Compartir por Email con archivo adjunto */}
                   <button
                     onClick={handleShareEmail}
+                    disabled={sharingEmail}
                     className="btn btn-secondary"
                     style={{
                       padding: "0.75rem 1.4rem",
                       fontSize: "0.88rem",
-                      background: "rgba(99, 102, 241, 0.14)",
-                      borderColor: "rgba(99, 102, 241, 0.4)",
+                      background: "rgba(99, 102, 241, 0.16)",
+                      borderColor: "rgba(99, 102, 241, 0.45)",
                       color: "#c7d2fe",
                     }}
-                    title="Enviar o compartir referencia por correo electrónico"
+                    title="Abre un borrador en Mail con el archivo EPUB adjunto"
                   >
-                    <Mail size={16} style={{ color: "var(--accent-primary)" }} />
-                    <span>Compartir por Email</span>
+                    {sharingEmail ? (
+                      <>
+                        <div style={{ width: "15px", height: "15px", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+                        <span>Adjuntando...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Mail size={16} style={{ color: "var(--accent-primary)" }} />
+                        <span>Email con EPUB adjunto</span>
+                      </>
+                    )}
                   </button>
 
-                  {openStatus && (
+                  {/* Alternativa Gmail Web */}
+                  <button
+                    onClick={handleShareGmailWeb}
+                    className="btn btn-secondary"
+                    style={{
+                      padding: "0.75rem 1.15rem",
+                      fontSize: "0.82rem",
+                      background: "rgba(255, 255, 255, 0.04)",
+                    }}
+                    title="Abre Gmail en el navegador y descarga el EPUB para que puedas arrastrarlo"
+                  >
+                    <span>Abrir en Gmail Web</span>
+                  </button>
+
+                  {/* Descargar borrador .eml */}
+                  <a
+                    href={`/api/books/${encodeURIComponent(book.id)}/email`}
+                    download
+                    className="btn btn-secondary"
+                    style={{
+                      padding: "0.75rem 1rem",
+                      fontSize: "0.82rem",
+                      background: "rgba(255, 255, 255, 0.04)",
+                      textDecoration: "none",
+                    }}
+                    title="Descargar archivo .eml con el EPUB adjunto"
+                  >
+                    <span>Descargar .eml</span>
+                  </a>
+
+                  {emailStatus && (
                     <span className="pill-tag" style={{ background: "rgba(16, 185, 129, 0.2)", color: "#6ee7b7", padding: "0.45rem 0.9rem" }}>
                       <Check size={14} />
-                      <span>{openStatus}</span>
+                      <span>{emailStatus}</span>
                     </span>
                   )}
                 </div>
@@ -437,12 +507,22 @@ export function BookDetailModal({ book, onClose }: BookDetailModalProps) {
             </a>
             <button
               onClick={handleShareEmail}
+              disabled={sharingEmail}
               className="btn btn-secondary btn-sm"
               style={{ padding: "0.6rem 1.2rem" }}
-              title="Compartir por correo electrónico"
+              title="Abre un borrador en Mail con el archivo EPUB adjunto"
             >
-              <Mail size={15} />
-              <span>Compartir por Email</span>
+              {sharingEmail ? (
+                <>
+                  <div style={{ width: "13px", height: "13px", border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+                  <span>Adjuntando...</span>
+                </>
+              ) : (
+                <>
+                  <Mail size={15} />
+                  <span>Email con adjunto</span>
+                </>
+              )}
             </button>
           </div>
 
