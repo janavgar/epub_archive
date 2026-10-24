@@ -186,6 +186,8 @@ def main() -> None:
                     f"{meta.get('author', 'Autor desconocido')}{year_info} | "
                     f"{meta.get('chapter', 'Capítulo')} (distancia: {match['distance']:.3f})"
                 )
+                if meta.get("book_id"):
+                    print(f"BookID: {meta['book_id']}")
                 print("-" * 60)
                 print(match["content"].strip())
                 print()

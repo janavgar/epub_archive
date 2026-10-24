@@ -10,7 +10,9 @@ import {
   SlidersHorizontal,
   ChevronRight,
   TrendingUp,
+  ExternalLink,
 } from "lucide-react";
+import { BookDetail } from "@/lib/db";
 
 interface SearchMatch {
   index: number;
@@ -21,13 +23,15 @@ interface SearchMatch {
   distance: number;
   similarity: number;
   content: string;
+  bookId?: string | null;
+  book?: BookDetail | null;
 }
 
 interface SemanticSearchViewProps {
-  onSelectBookByTitle?: (title: string) => void;
+  onSelectBook: (book: BookDetail) => void;
 }
 
-export function SemanticSearchView({ onSelectBookByTitle }: SemanticSearchViewProps) {
+export function SemanticSearchView({ onSelectBook }: SemanticSearchViewProps) {
   const [query, setQuery] = useState("");
   const [author, setAuthor] = useState("");
   const [limit, setLimit] = useState(5);
@@ -35,6 +39,7 @@ export function SemanticSearchView({ onSelectBookByTitle }: SemanticSearchViewPr
   const [results, setResults] = useState<SearchMatch[]>([]);
   const [searched, setSearched] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [loadingBookKey, setLoadingBookKey] = useState<string | null>(null);
 
   const samplePrompts = [
     "Paradoja de Schrödinger y mecánica cuántica",
@@ -72,6 +77,38 @@ export function SemanticSearchView({ onSelectBookByTitle }: SemanticSearchViewPr
     navigator.clipboard.writeText(text);
     setCopiedIndex(index);
     setTimeout(() => setCopiedIndex(null), 2000);
+  };
+
+  const handleOpenBookDetail = async (match: SearchMatch) => {
+    if (match.book) {
+      onSelectBook(match.book);
+      return;
+    }
+
+    const key = match.bookId || match.title;
+    setLoadingBookKey(key);
+
+    try {
+      if (match.bookId) {
+        const res = await fetch(`/api/books/${encodeURIComponent(match.bookId)}`);
+        if (res.ok) {
+          const bookData = await res.json();
+          onSelectBook(bookData);
+          return;
+        }
+      }
+
+      // Fallback: buscar por título exacto o parcial
+      const res = await fetch(`/api/books?search=${encodeURIComponent(match.title)}&limit=1`);
+      const data = await res.json();
+      if (data.books && data.books.length > 0) {
+        onSelectBook(data.books[0]);
+      }
+    } catch (e) {
+      console.error("Error al obtener la ficha del libro:", e);
+    } finally {
+      setLoadingBookKey(null);
+    }
   };
 
   return (
@@ -202,59 +239,108 @@ export function SemanticSearchView({ onSelectBookByTitle }: SemanticSearchViewPr
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: "1.75rem" }}>
-            {results.map((match) => (
-              <div key={match.index} className="search-result-card">
-                {/* Result Header */}
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1.5rem", flexWrap: "wrap", paddingBottom: "1.25rem", borderBottom: "1px solid var(--border-subtle)" }}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
-                      <span style={{ padding: "0.25rem 0.65rem", borderRadius: "8px", background: "rgba(99,102,241,0.2)", color: "#a5b4fc", fontWeight: 700, fontSize: "0.85rem" }}>
-                        #{match.index}
-                      </span>
-                      <h3 style={{ fontSize: "1.15rem", fontWeight: 700, color: "#fff" }}>
-                        {match.title}
-                      </h3>
-                      {match.year && <span style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>({match.year})</span>}
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", fontSize: "0.85rem", color: "var(--text-secondary)" }}>
-                      <span style={{ color: "#a5b4fc", fontWeight: 600 }}>{match.author}</span>
-                      <span>•</span>
-                      <span>{match.chapter}</span>
-                    </div>
-                  </div>
+            {results.map((match) => {
+              const itemKey = match.bookId || match.title;
+              const isLoadingThis = loadingBookKey === itemKey;
 
-                  {/* Similarity Badge & Copy Button */}
-                  <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-                    <div style={{ textAlign: "right" }}>
-                      <div style={{ fontSize: "0.95rem", fontWeight: 700, color: "#6ee7b7" }}>{match.similarity}% afinidad</div>
-                      <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>distancia: {match.distance.toFixed(3)}</div>
-                    </div>
-                    <button
-                      onClick={() => handleCopy(match.content, match.index)}
-                      className="btn btn-secondary btn-sm"
-                      title="Copiar fragmento"
-                    >
-                      {copiedIndex === match.index ? (
-                        <>
-                          <Check size={15} style={{ color: "var(--accent-emerald)" }} />
-                          <span>Copiado</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy size={15} />
-                          <span>Copiar</span>
-                        </>
+              return (
+                <div key={match.index} className="search-result-card">
+                  {/* Result Header */}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1.5rem", flexWrap: "wrap", paddingBottom: "1.25rem", borderBottom: "1px solid var(--border-subtle)" }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.45rem", flex: 1, minWidth: "260px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+                        <span style={{ padding: "0.25rem 0.65rem", borderRadius: "8px", background: "rgba(99,102,241,0.2)", color: "#a5b4fc", fontWeight: 700, fontSize: "0.85rem" }}>
+                          #{match.index}
+                        </span>
+                        
+                        {/* Title - Clickable to open full book sheet */}
+                        <h3
+                          onClick={() => handleOpenBookDetail(match)}
+                          style={{
+                            fontSize: "1.15rem",
+                            fontWeight: 700,
+                            color: "#fff",
+                            cursor: "pointer",
+                            transition: "all 0.2s ease",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "0.45rem",
+                          }}
+                          onMouseEnter={(e) => (e.currentTarget.style.color = "var(--accent-primary)")}
+                          onMouseLeave={(e) => (e.currentTarget.style.color = "#fff")}
+                          title="Haz clic para abrir la ficha completa de este libro"
+                        >
+                          <span>{match.title}</span>
+                          <ExternalLink size={14} style={{ opacity: 0.7 }} />
+                        </h3>
+
+                        {match.year && <span style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>({match.year})</span>}
+                      </div>
+
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+                        <span style={{ color: "#a5b4fc", fontWeight: 600 }}>{match.author}</span>
+                        <span>•</span>
+                        <span>{match.chapter}</span>
+                      </div>
+
+                      {/* Category tags from book if available */}
+                      {match.book?.categories && match.book.categories.length > 0 && (
+                        <div className="tags-row" style={{ marginTop: "0.2rem" }}>
+                          {match.book.categories.map((c) => (
+                            <span key={c} className="category-tag">
+                              {c}
+                            </span>
+                          ))}
+                        </div>
                       )}
-                    </button>
+                    </div>
+
+                    {/* Action Buttons: Ver Ficha, Similarity Badge & Copy Button */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
+                      {/* Botón destacado para acceder a la ficha completa */}
+                      <button
+                        onClick={() => handleOpenBookDetail(match)}
+                        disabled={isLoadingThis}
+                        className="btn btn-sm btn-primary"
+                        style={{ padding: "0.55rem 1.15rem", fontSize: "0.84rem" }}
+                        title="Abrir la ficha completa del libro, sinopsis, fragmentos y opciones de descarga/apertura"
+                      >
+                        <BookOpen size={15} />
+                        <span>{isLoadingThis ? "Cargando..." : "Ver Ficha del Libro"}</span>
+                      </button>
+
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ fontSize: "0.95rem", fontWeight: 700, color: "#6ee7b7" }}>{match.similarity}% afinidad</div>
+                        <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>distancia: {match.distance.toFixed(3)}</div>
+                      </div>
+
+                      <button
+                        onClick={() => handleCopy(match.content, match.index)}
+                        className="btn btn-secondary btn-sm"
+                        title="Copiar fragmento"
+                      >
+                        {copiedIndex === match.index ? (
+                          <>
+                            <Check size={15} style={{ color: "var(--accent-emerald)" }} />
+                            <span>Copiado</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy size={15} />
+                            <span>Copiar</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Excerpt Body */}
+                  <div className="search-match-content">
+                    {match.content}
                   </div>
                 </div>
-
-                {/* Excerpt Body */}
-                <div className="search-match-content">
-                  {match.content}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       ) : null}

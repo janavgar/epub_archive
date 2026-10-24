@@ -74,9 +74,7 @@ export default function Home() {
 
         {currentTab === "search" && (
           <SemanticSearchView
-            onSelectBookByTitle={(title) => {
-              // Could lookup and select book
-            }}
+            onSelectBook={setSelectedBook}
           />
         )}
 

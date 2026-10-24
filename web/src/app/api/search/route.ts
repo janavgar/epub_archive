@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { spawn } from "node:child_process";
 import path from "node:path";
+import { getDb, parseBookRow, BookDetail } from "@/lib/db";
 
 export async function GET(request: NextRequest) {
   try {
@@ -45,7 +46,9 @@ export async function GET(request: NextRequest) {
       });
     });
 
-    // Parse the textual search output into structured items
+    const db = getDb();
+
+    // Parse the textual search output into structured items with book details
     const matches: Array<{
       index: number;
       title: string;
@@ -55,9 +58,13 @@ export async function GET(request: NextRequest) {
       distance: number;
       similarity: number;
       content: string;
+      bookId: string | null;
+      book: BookDetail | null;
     }> = [];
 
-    const blocks = output.split(/\[\d+\] /).filter((b) => b.trim());
+    const rawParts = output.split(/\[\d+\] /);
+    rawParts.shift(); // Discard preamble logs before [1]
+    const blocks = rawParts.filter((b) => b.trim());
 
     for (let i = 0; i < blocks.length; i++) {
       const block = blocks[i].trim();
@@ -72,6 +79,7 @@ export async function GET(request: NextRequest) {
       let authorName = "Desconocido";
       let year = "";
       let chapter = "Capítulo";
+      let bookId: string | null = null;
 
       const dashIdx = header.indexOf(" — ");
       if (dashIdx !== -1) {
@@ -91,6 +99,13 @@ export async function GET(request: NextRequest) {
         }
       }
 
+      for (const line of lines) {
+        if (line.startsWith("BookID: ")) {
+          bookId = line.substring(8).trim();
+          break;
+        }
+      }
+
       const sepIdx = block.indexOf("------------------------------------------------------------");
       let content = "";
       if (sepIdx !== -1) {
@@ -99,15 +114,31 @@ export async function GET(request: NextRequest) {
         content = lines.slice(1).join("\n").trim();
       }
 
+      // Query complete book entity from SQLite
+      let bookRow: any = null;
+      if (bookId) {
+        bookRow = db.prepare("SELECT * FROM books WHERE id = ?").get(bookId);
+      }
+      if (!bookRow && title && title !== "Desconocido") {
+        bookRow = db.prepare("SELECT * FROM books WHERE title = ? COLLATE NOCASE LIMIT 1").get(title);
+        if (!bookRow) {
+          bookRow = db.prepare("SELECT * FROM books WHERE title LIKE ? COLLATE NOCASE LIMIT 1").get(`%${title}%`);
+        }
+      }
+
+      const book = bookRow ? parseBookRow(bookRow) : null;
+
       matches.push({
         index: i + 1,
-        title,
-        author: authorName,
-        year,
+        title: book?.title || title,
+        author: book?.author || authorName,
+        year: book?.year || year,
         chapter,
         distance,
         similarity,
         content,
+        bookId: book?.id || bookId,
+        book,
       });
     }
 
