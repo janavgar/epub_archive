@@ -27,9 +27,17 @@ export function BookDetailModal({ book, onClose }: BookDetailModalProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [openingApp, setOpeningApp] = useState(false);
   const [openStatus, setOpenStatus] = useState<string | null>(null);
+  const [sharingEmail, setSharingEmail] = useState(false);
+  const [emailStatus, setEmailStatus] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!book) return;
+    if (!book) {
+      setFullDetail(null);
+      setOpenStatus(null);
+      setEmailStatus(null);
+      return;
+    }
+    setActiveTab("summary");
     setLoading(true);
     fetch(`/api/books?id=${encodeURIComponent(book.id)}`)
       .then((res) => res.json())
@@ -73,9 +81,6 @@ export function BookDetailModal({ book, onClose }: BookDetailModalProps) {
       setOpeningApp(false);
     }
   };
-
-  const [sharingEmail, setSharingEmail] = useState(false);
-  const [emailStatus, setEmailStatus] = useState<string | null>(null);
 
   const handleShareEmail = async () => {
     if (!book) return;
