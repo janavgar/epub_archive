@@ -90,7 +90,7 @@ export function SemanticSearchView({ onSelectBook }: SemanticSearchViewProps) {
 
     try {
       if (match.bookId) {
-        const res = await fetch(`/api/books/${encodeURIComponent(match.bookId)}`);
+        const res = await fetch(`/api/books?id=${encodeURIComponent(match.bookId)}`);
         if (res.ok) {
           const bookData = await res.json();
           onSelectBook(bookData);

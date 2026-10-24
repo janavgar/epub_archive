@@ -31,10 +31,12 @@ export function BookDetailModal({ book, onClose }: BookDetailModalProps) {
   useEffect(() => {
     if (!book) return;
     setLoading(true);
-    fetch(`/api/books/${encodeURIComponent(book.id)}`)
+    fetch(`/api/books?id=${encodeURIComponent(book.id)}`)
       .then((res) => res.json())
       .then((data) => {
-        setFullDetail(data);
+        if (data && !data.error) {
+          setFullDetail(data);
+        }
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -158,7 +160,7 @@ export function BookDetailModal({ book, onClose }: BookDetailModalProps) {
             onClick={() => setActiveTab("chunks")}
             className={`modal-tab-item ${activeTab === "chunks" ? "active" : ""}`}
           >
-            Fragmentos Indexados ({book.chunk_count})
+            Fragmentos Indexados ({book.chunk_count ?? 0})
           </button>
           <button
             onClick={() => setActiveTab("metadata")}
@@ -188,7 +190,7 @@ export function BookDetailModal({ book, onClose }: BookDetailModalProps) {
                   Categorías Temáticas Asignadas
                 </div>
                 <div className="tags-row">
-                  {book.categories.map((c) => (
+                  {(book.categories || []).map((c) => (
                     <span key={c} className="category-tag" style={{ fontSize: "0.82rem", padding: "0.35rem 0.8rem" }}>
                       {c}
                     </span>
@@ -203,7 +205,7 @@ export function BookDetailModal({ book, onClose }: BookDetailModalProps) {
                     Conceptos & Palabras Clave
                   </div>
                   <div className="tags-row">
-                    {book.keywords.map((kw) => (
+                    {(book.keywords || []).map((kw) => (
                       <span key={kw} style={{ fontSize: "0.78rem", padding: "0.3rem 0.65rem", background: "rgba(255,255,255,0.04)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", color: "var(--text-secondary)" }}>
                         #{kw}
                       </span>
@@ -474,7 +476,9 @@ export function BookDetailModal({ book, onClose }: BookDetailModalProps) {
                   </div>
                   <div>
                     <span>Fecha de procesamiento: </span>
-                    <span style={{ color: "#cbd5e1" }}>{new Date(book.processed_at).toLocaleString()}</span>
+                    <span style={{ color: "#cbd5e1" }}>
+                      {book.processed_at ? new Date(book.processed_at).toLocaleString() : "N/A"}
+                    </span>
                   </div>
                 </div>
               </div>

@@ -53,11 +53,28 @@ export async function POST(request: NextRequest) {
 
   const encoder = new TextEncoder();
 
+  let isClosed = false;
+
   const stream = new ReadableStream({
     start(controller) {
-      controller.enqueue(
-        encoder.encode(`data: ${JSON.stringify({ type: "start", command: `epub-archive process ${resolvedDir}` })}\n\n`)
-      );
+      const safeEnqueue = (msg: any) => {
+        if (isClosed) return;
+        try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(msg)}\n\n`));
+        } catch {
+          isClosed = true;
+        }
+      };
+
+      const safeClose = () => {
+        if (isClosed) return;
+        isClosed = true;
+        try {
+          controller.close();
+        } catch {}
+      };
+
+      safeEnqueue({ type: "start", command: `epub-archive process ${resolvedDir}` });
 
       const proc = spawn("uv", args, {
         cwd: projectRoot,
@@ -65,6 +82,7 @@ export async function POST(request: NextRequest) {
       });
 
       proc.stdout.on("data", (data) => {
+        if (isClosed) return;
         const text = data.toString();
         const lines = text.split("\n");
         for (const line of lines) {
@@ -73,63 +91,60 @@ export async function POST(request: NextRequest) {
           // Parse progress format: [1/80] (1.2% | ETA: 4m 30s) Procesando: book.epub
           const match = line.match(/\[(\d+)\/(\d+)\]\s*\(([\d.]+)%\s*\|\s*ETA:\s*([^)]+)\)\s*Procesando:\s*(.*)/);
           if (match) {
-            controller.enqueue(
-              encoder.encode(
-                `data: ${JSON.stringify({
-                  type: "progress",
-                  current: parseInt(match[1], 10),
-                  total: parseInt(match[2], 10),
-                  percent: parseFloat(match[3]),
-                  eta: match[4].trim(),
-                  book: match[5].trim(),
-                  raw: line,
-                })}\n\n`
-              )
-            );
+            safeEnqueue({
+              type: "progress",
+              current: parseInt(match[1], 10),
+              total: parseInt(match[2], 10),
+              percent: parseFloat(match[3]),
+              eta: match[4].trim(),
+              book: match[5].trim(),
+              raw: line,
+            });
           } else {
-            controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify({ type: "log", line })}\n\n`)
-            );
+            safeEnqueue({ type: "log", line });
           }
         }
       });
 
       proc.stderr.on("data", (data) => {
+        if (isClosed) return;
         const text = data.toString();
         const lines = text.split("\n");
         for (const line of lines) {
           if (line.trim()) {
-            controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify({ type: "log", line, isStderr: true })}\n\n`)
-            );
+            safeEnqueue({ type: "log", line, isStderr: true });
           }
         }
       });
 
+      proc.stdout.on("error", () => {
+        isClosed = true;
+      });
+
+      proc.stderr.on("error", () => {
+        isClosed = true;
+      });
+
       proc.on("close", (code) => {
-        controller.enqueue(
-          encoder.encode(
-            `data: ${JSON.stringify({
-              type: "finish",
-              code,
-              success: code === 0,
-            })}\n\n`
-          )
-        );
-        controller.close();
+        safeEnqueue({
+          type: "finish",
+          code,
+          success: code === 0,
+        });
+        safeClose();
       });
 
       proc.on("error", (err) => {
-        controller.enqueue(
-          encoder.encode(
-            `data: ${JSON.stringify({
-              type: "error",
-              message: err.message,
-            })}\n\n`
-          )
-        );
-        controller.close();
+        safeEnqueue({
+          type: "error",
+          message: err.message,
+        });
+        safeClose();
       });
+    },
+    cancel() {
+      // Client disconnected, do not attempt further enqueues
+      isClosed = true;
     },
   });
 

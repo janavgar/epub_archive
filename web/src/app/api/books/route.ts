@@ -1,9 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getBooks } from "@/lib/db";
+import { getBooks, getBookById } from "@/lib/db";
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
+    const bookId = searchParams.get("id");
+    if (bookId) {
+      const decodedId = decodeURIComponent(bookId);
+      const book = getBookById(decodedId);
+      if (!book) {
+        return NextResponse.json({ error: "Libro no encontrado" }, { status: 404 });
+      }
+      return NextResponse.json(book);
+    }
+
     const search = searchParams.get("search") || undefined;
     const category = searchParams.get("category") || undefined;
     const status = searchParams.get("status") || undefined;
