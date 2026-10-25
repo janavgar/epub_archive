@@ -47,7 +47,9 @@ class Storage:
                 chunk_count INTEGER NOT NULL DEFAULT 0,
                 chapter_count INTEGER NOT NULL DEFAULT 0,
                 cluster_id INTEGER DEFAULT -1,
-                cluster_label TEXT DEFAULT ''
+                cluster_label TEXT DEFAULT '',
+                is_read INTEGER NOT NULL DEFAULT 0,
+                read_at TEXT DEFAULT NULL
             );
             CREATE TABLE IF NOT EXISTS chunks (
                 id TEXT PRIMARY KEY,
@@ -60,6 +62,7 @@ class Storage:
             CREATE INDEX IF NOT EXISTS chunks_book_id ON chunks(book_id);
             CREATE INDEX IF NOT EXISTS books_status ON books(status);
             CREATE INDEX IF NOT EXISTS books_cluster ON books(cluster_id);
+            CREATE INDEX IF NOT EXISTS books_is_read ON books(is_read);
             """
         )
         self.db.commit()
@@ -77,6 +80,8 @@ class Storage:
             ("chapter_count", "INTEGER NOT NULL DEFAULT 0"),
             ("cluster_id", "INTEGER DEFAULT -1"),
             ("cluster_label", "TEXT DEFAULT ''"),
+            ("is_read", "INTEGER NOT NULL DEFAULT 0"),
+            ("read_at", "TEXT DEFAULT NULL"),
         ]
         for col_name, col_type in columns_to_add:
             if col_name not in existing_cols:

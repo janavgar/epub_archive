@@ -8,24 +8,27 @@ import {
   PlayCircle,
   Network,
   RefreshCw,
+  AlertTriangle,
 } from "lucide-react";
 
-export type NavTab = "dashboard" | "books" | "search" | "cluster" | "process";
+export type NavTab = "dashboard" | "books" | "errors" | "search" | "cluster" | "process";
 
 interface NavbarProps {
   currentTab: NavTab;
   onSelectTab: (tab: NavTab) => void;
   totalBooks?: number;
+  errorBooks?: number;
 }
 
 interface NavItem {
   id: NavTab;
   label: string;
-  icon: React.ComponentType<{ className?: string; size?: number }>;
+  icon: React.ComponentType<{ className?: string; size?: number; style?: React.CSSProperties }>;
   count?: number;
+  isAlert?: boolean;
 }
 
-export function Navbar({ currentTab, onSelectTab, totalBooks }: NavbarProps) {
+export function Navbar({ currentTab, onSelectTab, totalBooks, errorBooks }: NavbarProps) {
   const [modelStatus, setModelStatus] = useState<{
     online: boolean;
     chatModel?: string | null;
@@ -58,6 +61,7 @@ export function Navbar({ currentTab, onSelectTab, totalBooks }: NavbarProps) {
   const navItems: NavItem[] = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "books", label: "Biblioteca", icon: BookOpen, count: totalBooks },
+    { id: "errors", label: "Errores", icon: AlertTriangle, count: errorBooks, isAlert: true },
     { id: "search", label: "Búsqueda IA", icon: Search },
     { id: "cluster", label: "Clustering", icon: Network },
     { id: "process", label: "Procesador", icon: PlayCircle },
@@ -90,11 +94,17 @@ export function Navbar({ currentTab, onSelectTab, totalBooks }: NavbarProps) {
                 key={item.id}
                 onClick={() => onSelectTab(item.id)}
                 className={`nav-tab-btn ${active ? "active" : ""}`}
+                style={item.isAlert && item.count && item.count > 0 ? { borderColor: active ? undefined : "rgba(244, 63, 94, 0.25)" } : undefined}
               >
-                <Icon size={17} />
+                <Icon size={17} style={item.isAlert && item.count && item.count > 0 ? { color: "#fb7185" } : undefined} />
                 <span>{item.label}</span>
                 {item.count !== undefined && item.count > 0 && (
-                  <span className="nav-tab-badge">{item.count}</span>
+                  <span
+                    className="nav-tab-badge"
+                    style={item.isAlert ? { background: "rgba(244, 63, 94, 0.2)", color: "#fda4af", border: "1px solid rgba(244, 63, 94, 0.35)" } : undefined}
+                  >
+                    {item.count}
+                  </span>
                 )}
               </button>
             );

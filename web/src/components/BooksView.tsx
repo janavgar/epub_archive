@@ -9,20 +9,24 @@ import {
   ChevronLeft,
   ChevronRight,
   ShieldCheck,
+  BookCheck,
 } from "lucide-react";
 import { BookDetail } from "@/lib/db";
 
 interface BooksViewProps {
   onSelectBook: (book: BookDetail) => void;
+  onBookUpdated?: (book: BookDetail) => void;
   initialCategory?: string;
 }
 
-export function BooksView({ onSelectBook, initialCategory }: BooksViewProps) {
+export function BooksView({ onSelectBook, onBookUpdated, initialCategory }: BooksViewProps) {
   const [books, setBooks] = useState<BookDetail[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>(initialCategory || "");
   const [selectedStatus, setSelectedStatus] = useState<string>("");
+  const [readFilter, setReadFilter] = useState<string>("");
+  const [updatingBookId, setUpdatingBookId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(1);
@@ -53,6 +57,8 @@ export function BooksView({ onSelectBook, initialCategory }: BooksViewProps) {
       if (search.trim()) params.set("search", search.trim());
       if (selectedCategory) params.set("category", selectedCategory);
       if (selectedStatus) params.set("status", selectedStatus);
+      if (readFilter === "read") params.set("read", "true");
+      if (readFilter === "unread") params.set("read", "false");
 
       const res = await fetch(`/api/books?${params.toString()}`);
       const data = await res.json();
@@ -67,7 +73,32 @@ export function BooksView({ onSelectBook, initialCategory }: BooksViewProps) {
 
   useEffect(() => {
     loadBooks();
-  }, [page, search, selectedCategory, selectedStatus]);
+  }, [page, search, selectedCategory, selectedStatus, readFilter]);
+
+  const handleToggleRead = async (e: React.MouseEvent, book: BookDetail) => {
+    e.stopPropagation();
+    setUpdatingBookId(book.id);
+    try {
+      const res = await fetch("/api/books/read", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: book.id, is_read: !book.is_read }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setBooks((prev) =>
+          prev.map((b) =>
+            b.id === book.id ? { ...b, is_read: updated.is_read, read_at: updated.read_at } : b
+          )
+        );
+        if (onBookUpdated) onBookUpdated(updated);
+      }
+    } catch (err) {
+      console.error("Error al actualizar estado de lectura:", err);
+    } finally {
+      setUpdatingBookId(null);
+    }
+  };
 
   const getCoverGradient = (str: string) => {
     let hash = 0;
@@ -172,6 +203,22 @@ export function BooksView({ onSelectBook, initialCategory }: BooksViewProps) {
             <option value="error">Con errores</option>
           </select>
         </div>
+
+        {/* Read status filter */}
+        <div style={{ width: "190px" }}>
+          <select
+            value={readFilter}
+            onChange={(e) => {
+              setReadFilter(e.target.value);
+              setPage(1);
+            }}
+            className="form-select"
+          >
+            <option value="">Lectura: Todos</option>
+            <option value="read">Solo Leídos (✓)</option>
+            <option value="unread">Solo Pendientes</option>
+          </select>
+        </div>
       </div>
 
       {/* Books Content */}
@@ -201,19 +248,53 @@ export function BooksView({ onSelectBook, initialCategory }: BooksViewProps) {
                   className="book-cover"
                   style={{ background: getCoverGradient(book.title) }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.4rem" }}>
                     <span className="pill-tag" style={{ background: "rgba(0,0,0,0.45)", color: "#fff", borderColor: "rgba(255,255,255,0.2)" }}>
                       {book.language ? book.language.toUpperCase() : "EPUB"}
                     </span>
-                    {book.metadata_corrected && (
-                      <span className="pill-tag" style={{ background: "rgba(16, 185, 129, 0.3)", color: "#a7f3d0", borderColor: "rgba(16, 185, 129, 0.5)", display: "flex", alignItems: "center", gap: "0.3rem" }}>
-                        <ShieldCheck size={11} />
-                        <span>Validado</span>
-                      </span>
-                    )}
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                      {book.is_read && (
+                        <span
+                          className="pill-tag"
+                          style={{
+                            background: "rgba(16, 185, 129, 0.25)",
+                            color: "#34d399",
+                            borderColor: "rgba(16, 185, 129, 0.5)",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "0.25rem",
+                          }}
+                          title="Libro marcado como leído"
+                        >
+                          <BookCheck size={11} />
+                          <span>Leído</span>
+                        </span>
+                      )}
+                      {book.metadata_corrected && (
+                        <span className="pill-tag" style={{ background: "rgba(16, 185, 129, 0.3)", color: "#a7f3d0", borderColor: "rgba(16, 185, 129, 0.5)", display: "flex", alignItems: "center", gap: "0.3rem" }}>
+                          <ShieldCheck size={11} />
+                          <span>Validado</span>
+                        </span>
+                      )}
+                    </div>
                   </div>
 
-                  <h3 className="book-cover-title">{book.title}</h3>
+                  <h3 className="book-cover-title" style={{ display: "flex", alignItems: "flex-start", gap: "0.45rem" }}>
+                    {book.is_read && (
+                      <span title="Libro marcado como leído" style={{ display: "inline-flex" }}>
+                        <BookCheck
+                          size={17}
+                          style={{
+                            color: "#34d399",
+                            flexShrink: 0,
+                            marginTop: "2px",
+                            filter: "drop-shadow(0 0 6px rgba(52, 211, 153, 0.6))",
+                          }}
+                        />
+                      </span>
+                    )}
+                    <span>{book.title}</span>
+                  </h3>
                 </div>
 
                 {/* Body Content */}
@@ -245,7 +326,29 @@ export function BooksView({ onSelectBook, initialCategory }: BooksViewProps) {
                     </span>
                   )}
                 </div>
-                <span>{book.chunk_count} chunks</span>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+                  <button
+                    onClick={(e) => handleToggleRead(e, book)}
+                    disabled={updatingBookId === book.id}
+                    className="btn btn-sm"
+                    style={{
+                      padding: "0.22rem 0.55rem",
+                      fontSize: "0.72rem",
+                      borderRadius: "6px",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.3rem",
+                      background: book.is_read ? "rgba(16, 185, 129, 0.2)" : "rgba(255, 255, 255, 0.05)",
+                      borderColor: book.is_read ? "rgba(16, 185, 129, 0.45)" : "var(--border-subtle)",
+                      color: book.is_read ? "#6ee7b7" : "var(--text-muted)",
+                    }}
+                    title={book.is_read ? "Haz clic para desmarcar como leído" : "Marcar como leído"}
+                  >
+                    <BookCheck size={12} style={{ color: book.is_read ? "#34d399" : "var(--text-muted)" }} />
+                    <span>{book.is_read ? "Leído" : "Leído?"}</span>
+                  </button>
+                  <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>{book.chunk_count} chunks</span>
+                </div>
               </div>
             </div>
           ))}
@@ -272,8 +375,32 @@ export function BooksView({ onSelectBook, initialCategory }: BooksViewProps) {
               onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
             >
               <div style={{ maxWidth: "650px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "0.25rem" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "0.25rem", flexWrap: "wrap" }}>
+                  {book.is_read && (
+                    <span title="Libro marcado como leído" style={{ display: "inline-flex" }}>
+                      <BookCheck
+                        size={18}
+                        style={{
+                          color: "#34d399",
+                          filter: "drop-shadow(0 0 6px rgba(52, 211, 153, 0.5))",
+                          flexShrink: 0,
+                        }}
+                      />
+                    </span>
+                  )}
                   <h3 style={{ fontSize: "1.05rem", fontWeight: 700, color: "#fff" }}>{book.title}</h3>
+                  {book.is_read && (
+                    <span
+                      className="pill-tag"
+                      style={{
+                        background: "rgba(16, 185, 129, 0.18)",
+                        color: "#6ee7b7",
+                        borderColor: "rgba(16, 185, 129, 0.35)",
+                      }}
+                    >
+                      Leído
+                    </span>
+                  )}
                   {book.year && <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>({book.year})</span>}
                   {book.metadata_corrected && (
                     <span className="pill-tag" style={{ background: "rgba(16, 185, 129, 0.2)", color: "#6ee7b7" }}>
@@ -289,7 +416,28 @@ export function BooksView({ onSelectBook, initialCategory }: BooksViewProps) {
                 )}
               </div>
 
-              <div style={{ display: "flex", alignItems: "center", gap: "1.5rem" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}>
+                <button
+                  onClick={(e) => handleToggleRead(e, book)}
+                  disabled={updatingBookId === book.id}
+                  className="btn btn-sm"
+                  style={{
+                    padding: "0.35rem 0.75rem",
+                    fontSize: "0.78rem",
+                    borderRadius: "6px",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.35rem",
+                    background: book.is_read ? "rgba(16, 185, 129, 0.2)" : "rgba(255, 255, 255, 0.05)",
+                    borderColor: book.is_read ? "rgba(16, 185, 129, 0.45)" : "var(--border-subtle)",
+                    color: book.is_read ? "#6ee7b7" : "var(--text-muted)",
+                  }}
+                  title={book.is_read ? "Haz clic para desmarcar como leído" : "Marcar como leído"}
+                >
+                  <BookCheck size={14} style={{ color: book.is_read ? "#34d399" : "var(--text-muted)" }} />
+                  <span>{book.is_read ? "Leído" : "Marcar Leído"}</span>
+                </button>
+
                 <div className="tags-row">
                   {book.categories.slice(0, 2).map((cat) => (
                     <span key={cat} className="category-tag">{cat}</span>

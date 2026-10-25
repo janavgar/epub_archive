@@ -13,6 +13,7 @@ import {
   Sparkles,
   ArrowRight,
   TrendingUp,
+  BookCheck,
 } from "lucide-react";
 import { BookDetail } from "@/lib/db";
 import { NavTab } from "./Navbar";
@@ -21,6 +22,7 @@ interface DashboardStats {
   totalBooks: number;
   doneBooks: number;
   errorBooks: number;
+  readBooks?: number;
   totalChunks: number;
   topCategories: Array<{ name: string; count: number }>;
   clusters: Array<{ cluster_id: number; cluster_label: string; count: number }>;
@@ -49,6 +51,8 @@ export function DashboardView({
   }
 
   const maxCategoryCount = stats.topCategories[0]?.count || 1;
+  const readCount = stats.readBooks ?? 0;
+  const readPercentage = stats.totalBooks > 0 ? Math.round((readCount / stats.totalBooks) * 100) : 0;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "2.5rem" }}>
@@ -81,7 +85,7 @@ export function DashboardView({
         </div>
       </div>
 
-      {/* 4 Stat Metric Cards */}
+      {/* 5 Stat Metric Cards */}
       <div className="stats-grid">
         {/* Card 1: Total Books */}
         <div className="stat-card">
@@ -101,7 +105,22 @@ export function DashboardView({
               {stats.doneBooks} listos
             </span>
             {stats.errorBooks > 0 && (
-              <span style={{ display: "flex", alignItems: "center", gap: "0.3rem", color: "var(--accent-rose)" }}>
+              <span
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onNavigate("errors");
+                }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.3rem",
+                  color: "var(--accent-rose)",
+                  cursor: "pointer",
+                  textDecoration: "underline",
+                  textUnderlineOffset: "3px",
+                }}
+                title="Ver lista de EPUBs que no se pudieron clasificar"
+              >
                 <AlertCircle size={13} />
                 {stats.errorBooks} fallidos
               </span>
@@ -109,7 +128,32 @@ export function DashboardView({
           </div>
         </div>
 
-        {/* Card 2: Chunks */}
+        {/* Card 2: Libros Leídos */}
+        <div
+          className="stat-card"
+          onClick={() => onNavigate("books")}
+          style={{ cursor: "pointer" }}
+          title="Ver biblioteca"
+        >
+          <div className="stat-header">
+            <span className="stat-label">Libros Leídos</span>
+            <div className="stat-icon" style={{ background: "rgba(16, 185, 129, 0.15)", color: "#34d399" }}>
+              <BookCheck size={20} />
+            </div>
+          </div>
+          <div>
+            <div className="stat-value" style={{ color: "#6ee7b7" }}>{readCount}</div>
+            <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
+              {readPercentage}% de tu biblioteca
+            </span>
+          </div>
+          <div className="stat-footer" style={{ display: "flex", alignItems: "center", gap: "0.4rem", color: "var(--accent-emerald)" }}>
+            <BookCheck size={13} />
+            <span>Progreso de lectura</span>
+          </div>
+        </div>
+
+        {/* Card 3: Chunks */}
         <div className="stat-card">
           <div className="stat-header">
             <span className="stat-label">Fragmentos Vectorizados</span>
@@ -126,7 +170,7 @@ export function DashboardView({
           </div>
         </div>
 
-        {/* Card 3: Categories */}
+        {/* Card 4: Categories */}
         <div className="stat-card">
           <div className="stat-header">
             <span className="stat-label">Taxonomía & Categorías</span>
@@ -143,7 +187,7 @@ export function DashboardView({
           </div>
         </div>
 
-        {/* Card 4: Clusters */}
+        {/* Card 5: Clusters */}
         <div className="stat-card">
           <div className="stat-header">
             <span className="stat-label">Clusters Descubiertos</span>
@@ -265,9 +309,19 @@ export function DashboardView({
               >
                 <div className="book-card-body">
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.5rem" }}>
-                    <h3 style={{ fontSize: "0.95rem", fontWeight: 800, color: "#fff", lineHeight: 1.35 }}>
-                      {book.title}
-                    </h3>
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: "0.4rem" }}>
+                      {book.is_read && (
+                        <span title="Libro marcado como leído" style={{ display: "inline-flex" }}>
+                          <BookCheck
+                            size={16}
+                            style={{ color: "#34d399", flexShrink: 0, marginTop: "2px", filter: "drop-shadow(0 0 5px rgba(52, 211, 153, 0.5))" }}
+                          />
+                        </span>
+                      )}
+                      <h3 style={{ fontSize: "0.95rem", fontWeight: 800, color: "#fff", lineHeight: 1.35 }}>
+                        {book.title}
+                      </h3>
+                    </div>
                     {book.year && (
                       <span className="pill-tag">{book.year}</span>
                     )}

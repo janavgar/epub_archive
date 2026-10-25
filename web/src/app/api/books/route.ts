@@ -17,6 +17,11 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get("search") || undefined;
     const category = searchParams.get("category") || undefined;
     const status = searchParams.get("status") || undefined;
+    const isReadParam = searchParams.get("read");
+    let isRead: boolean | undefined = undefined;
+    if (isReadParam === "true" || isReadParam === "1") isRead = true;
+    else if (isReadParam === "false" || isReadParam === "0") isRead = false;
+
     const clusterIdStr = searchParams.get("cluster");
     const clusterId = clusterIdStr !== null && clusterIdStr !== undefined ? parseInt(clusterIdStr, 10) : undefined;
     const limit = parseInt(searchParams.get("limit") || "60", 10);
@@ -26,6 +31,7 @@ export async function GET(request: NextRequest) {
       search,
       category,
       status,
+      isRead,
       clusterId,
       limit,
       offset,

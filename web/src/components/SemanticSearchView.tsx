@@ -11,6 +11,7 @@ import {
   ChevronRight,
   TrendingUp,
   ExternalLink,
+  BookCheck,
 } from "lucide-react";
 import { BookDetail } from "@/lib/db";
 
@@ -270,9 +271,32 @@ export function SemanticSearchView({ onSelectBook }: SemanticSearchViewProps) {
                           onMouseLeave={(e) => (e.currentTarget.style.color = "#fff")}
                           title="Haz clic para abrir la ficha completa de este libro"
                         >
+                          {match.book?.is_read && (
+                            <BookCheck
+                              size={18}
+                              style={{
+                                color: "#34d399",
+                                filter: "drop-shadow(0 0 5px rgba(52, 211, 153, 0.5))",
+                                flexShrink: 0,
+                              }}
+                            />
+                          )}
                           <span>{match.title}</span>
                           <ExternalLink size={14} style={{ opacity: 0.7 }} />
                         </h3>
+
+                        {match.book?.is_read && (
+                          <span
+                            className="pill-tag"
+                            style={{
+                              background: "rgba(16, 185, 129, 0.2)",
+                              color: "#6ee7b7",
+                              borderColor: "rgba(16, 185, 129, 0.35)",
+                            }}
+                          >
+                            Leído
+                          </span>
+                        )}
 
                         {match.year && <span style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>({match.year})</span>}
                       </div>

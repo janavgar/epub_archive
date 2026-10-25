@@ -7,6 +7,7 @@ import { BooksView } from "@/components/BooksView";
 import { SemanticSearchView } from "@/components/SemanticSearchView";
 import { ClusteringView } from "@/components/ClusteringView";
 import { ProcessView } from "@/components/ProcessView";
+import { ErrorsView } from "@/components/ErrorsView";
 import { BookDetailModal } from "@/components/BookDetailModal";
 import { BookDetail } from "@/lib/db";
 
@@ -49,6 +50,7 @@ export default function Home() {
           setCurrentTab(tab);
         }}
         totalBooks={stats?.totalBooks}
+        errorBooks={stats?.errorBooks}
       />
 
       {/* Main View Area with generous edge margins */}
@@ -68,7 +70,19 @@ export default function Home() {
         {currentTab === "books" && (
           <BooksView
             onSelectBook={setSelectedBook}
+            onBookUpdated={() => refreshStats()}
             initialCategory={filterCategory}
+          />
+        )}
+
+        {currentTab === "errors" && (
+          <ErrorsView
+            onSelectBook={setSelectedBook}
+            onNavigate={(tab) => {
+              setFilterCategory("");
+              setCurrentTab(tab);
+            }}
+            onRefreshStats={refreshStats}
           />
         )}
 
@@ -96,6 +110,10 @@ export default function Home() {
       <BookDetailModal
         book={selectedBook}
         onClose={() => setSelectedBook(null)}
+        onToggleRead={(updated) => {
+          setSelectedBook(updated);
+          refreshStats();
+        }}
       />
 
       {/* Footer */}

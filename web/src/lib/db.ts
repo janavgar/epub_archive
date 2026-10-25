@@ -7,6 +7,22 @@ const DB_PATH = path.resolve(process.cwd(), "..", ".epub_archive", "archive.sqli
 
 let dbInstance: DatabaseSync | null = null;
 
+export function ensureSchema(db: DatabaseSync): void {
+  try {
+    const cols = (db.prepare("PRAGMA table_info(books)").all() as any[]).map((r) => r.name);
+    if (!cols.includes("is_read")) {
+      db.exec("ALTER TABLE books ADD COLUMN is_read INTEGER NOT NULL DEFAULT 0");
+    }
+    if (!cols.includes("read_at")) {
+      db.exec("ALTER TABLE books ADD COLUMN read_at TEXT DEFAULT NULL");
+    }
+    db.exec("CREATE INDEX IF NOT EXISTS books_is_read ON books(is_read)");
+    db.exec("CREATE INDEX IF NOT EXISTS books_status ON books(status)");
+  } catch (e) {
+    console.error("Error migrating sqlite schema:", e);
+  }
+}
+
 export function getDb(): DatabaseSync {
   if (!dbInstance) {
     if (!fs.existsSync(DB_PATH)) {
@@ -14,6 +30,7 @@ export function getDb(): DatabaseSync {
       fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
     }
     dbInstance = new DatabaseSync(DB_PATH);
+    ensureSchema(dbInstance);
   }
   return dbInstance;
 }
@@ -39,12 +56,16 @@ export interface BookRow {
   chapter_count: number;
   cluster_id: number;
   cluster_label: string;
+  is_read: number;
+  read_at: string | null;
 }
 
-export interface BookDetail extends Omit<BookRow, "categories_json" | "keywords_json"> {
+export interface BookDetail extends Omit<BookRow, "categories_json" | "keywords_json" | "is_read"> {
   categories: string[];
   keywords: string[];
   metadata_corrected: boolean;
+  is_read: boolean;
+  read_at: string | null;
 }
 
 export function parseBookRow(row: any): BookDetail {
@@ -67,6 +88,8 @@ export function parseBookRow(row: any): BookDetail {
     ...row,
     categories,
     keywords,
+    is_read: Boolean(row.is_read),
+    read_at: row.read_at || null,
     metadata_corrected: Boolean(metadata_corrected),
   };
 }
@@ -77,6 +100,7 @@ export function getArchiveStats() {
   const totalBooks = (db.prepare("SELECT COUNT(*) as c FROM books").get() as any)?.c || 0;
   const doneBooks = (db.prepare("SELECT COUNT(*) as c FROM books WHERE status = 'done'").get() as any)?.c || 0;
   const errorBooks = (db.prepare("SELECT COUNT(*) as c FROM books WHERE status = 'error'").get() as any)?.c || 0;
+  const readBooks = (db.prepare("SELECT COUNT(*) as c FROM books WHERE is_read = 1").get() as any)?.c || 0;
   const totalChunks = (db.prepare("SELECT COUNT(*) as c FROM chunks").get() as any)?.c || 0;
 
   const rows = db.prepare("SELECT categories_json FROM books WHERE status = 'done'").all() as any[];
@@ -108,6 +132,7 @@ export function getArchiveStats() {
     totalBooks,
     doneBooks,
     errorBooks,
+    readBooks,
     totalChunks,
     topCategories,
     clusters: clusterRows,
@@ -119,6 +144,7 @@ export function getBooks(options: {
   search?: string;
   category?: string;
   status?: string;
+  isRead?: boolean;
   clusterId?: number;
   limit?: number;
   offset?: number;
@@ -133,6 +159,11 @@ export function getBooks(options: {
   if (options.status) {
     query += "AND status = ? ";
     params.push(options.status);
+  }
+
+  if (options.isRead !== undefined) {
+    query += "AND is_read = ? ";
+    params.push(options.isRead ? 1 : 0);
   }
 
   if (options.clusterId !== undefined && options.clusterId !== null) {
@@ -183,4 +214,33 @@ export function getBookById(id: string) {
     ...book,
     sample_chunks: chunks,
   };
+}
+
+export function setBookReadStatus(id: string, isRead?: boolean) {
+  const db = getDb();
+  const current = db.prepare("SELECT is_read FROM books WHERE id = ?").get(id) as any;
+  if (!current) return null;
+
+  let newStatus: number;
+  let readAt: string | null = null;
+
+  if (isRead !== undefined) {
+    newStatus = isRead ? 1 : 0;
+    readAt = isRead ? new Date().toISOString() : null;
+  } else {
+    newStatus = current.is_read === 1 ? 0 : 1;
+    readAt = newStatus === 1 ? new Date().toISOString() : null;
+  }
+
+  db.prepare("UPDATE books SET is_read = ?, read_at = ? WHERE id = ?").run(newStatus, readAt, id);
+  return getBookById(id);
+}
+
+export function getErrorBooks() {
+  const db = getDb();
+  const rows = db
+    .prepare("SELECT * FROM books WHERE status = 'error' ORDER BY title COLLATE NOCASE")
+    .all()
+    .map(parseBookRow);
+  return rows;
 }

@@ -10,21 +10,24 @@ import {
   BookOpen,
   Download,
   FolderOpen,
+  BookCheck,
 } from "lucide-react";
 import { BookDetail } from "@/lib/db";
 
 interface BookDetailModalProps {
   book: BookDetail | null;
   onClose: () => void;
+  onToggleRead?: (book: BookDetail) => void;
 }
 
-export function BookDetailModal({ book, onClose }: BookDetailModalProps) {
+export function BookDetailModal({ book, onClose, onToggleRead }: BookDetailModalProps) {
   const [fullDetail, setFullDetail] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<"summary" | "chunks" | "metadata">("summary");
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [openingApp, setOpeningApp] = useState(false);
   const [openStatus, setOpenStatus] = useState<string | null>(null);
+  const [updatingRead, setUpdatingRead] = useState(false);
 
   useEffect(() => {
     if (!book) {
@@ -77,6 +80,32 @@ export function BookDetailModal({ book, onClose }: BookDetailModalProps) {
     }
   };
 
+  const isRead = fullDetail?.is_read ?? book.is_read ?? false;
+  const readAt = fullDetail?.read_at ?? book.read_at;
+
+  const handleToggleRead = async () => {
+    if (!book) return;
+    setUpdatingRead(true);
+    try {
+      const res = await fetch("/api/books/read", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: book.id }),
+      });
+      const data = await res.json();
+      if (data.success && data.book) {
+        setFullDetail(data.book);
+        if (onToggleRead) {
+          onToggleRead(data.book);
+        }
+      }
+    } catch (e) {
+      console.error("Error al actualizar estado de lectura:", e);
+    } finally {
+      setUpdatingRead(false);
+    }
+  };
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
@@ -92,14 +121,66 @@ export function BookDetailModal({ book, onClose }: BookDetailModalProps) {
                   <span>Metadata Validada por IA</span>
                 </span>
               )}
+              {isRead && (
+                <span
+                  className="pill-tag"
+                  style={{
+                    background: "rgba(16, 185, 129, 0.25)",
+                    color: "#a7f3d0",
+                    borderColor: "rgba(16, 185, 129, 0.5)",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.35rem",
+                    fontWeight: 700,
+                  }}
+                  title={`Libro leído${readAt ? ` el ${new Date(readAt).toLocaleDateString()}` : ""}`}
+                >
+                  <BookCheck size={13} style={{ color: "#34d399" }} />
+                  <span>Leído</span>
+                </span>
+              )}
             </div>
-            <h2 className="modal-title">{book.title}</h2>
+
+            <div style={{ display: "flex", alignItems: "center", gap: "0.65rem", flexWrap: "wrap" }}>
+              <h2 className="modal-title" style={{ margin: 0 }}>{book.title}</h2>
+              {isRead && (
+                <span title="Libro marcado como leído" style={{ display: "inline-flex" }}>
+                  <BookCheck
+                    size={20}
+                    style={{ color: "#34d399", filter: "drop-shadow(0 0 6px rgba(52, 211, 153, 0.4))", flexShrink: 0 }}
+                  />
+                </span>
+              )}
+            </div>
             <p className="modal-subtitle">{book.author}</p>
           </div>
 
-          <button onClick={onClose} className="modal-close-btn" title="Cerrar ventana">
-            <X size={20} />
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+            <button
+              onClick={handleToggleRead}
+              disabled={updatingRead}
+              className={`btn btn-sm ${isRead ? "btn-secondary" : "btn-secondary"}`}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.4rem",
+                padding: "0.45rem 0.9rem",
+                fontSize: "0.82rem",
+                borderRadius: "var(--radius-md)",
+                background: isRead ? "rgba(16, 185, 129, 0.18)" : "rgba(255, 255, 255, 0.05)",
+                borderColor: isRead ? "rgba(16, 185, 129, 0.45)" : "var(--border-subtle)",
+                color: isRead ? "#6ee7b7" : "var(--text-secondary)",
+              }}
+              title={isRead ? "Haz clic para desmarcar como leído" : "Marcar este libro como leído"}
+            >
+              <BookCheck size={15} style={{ color: isRead ? "#34d399" : "var(--text-muted)" }} />
+              <span>{isRead ? "Leído" : "Marcar Leído"}</span>
+            </button>
+
+            <button onClick={onClose} className="modal-close-btn" title="Cerrar ventana">
+              <X size={20} />
+            </button>
+          </div>
         </div>
 
         {/* Modal Tabs */}
@@ -378,7 +459,7 @@ export function BookDetailModal({ book, onClose }: BookDetailModalProps) {
 
         {/* Modal Persistent Footer for Quick Access on Any Tab */}
         <div className="modal-footer">
-          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
             <button
               onClick={() => handleOpenBook(false)}
               disabled={openingApp}
@@ -399,6 +480,24 @@ export function BookDetailModal({ book, onClose }: BookDetailModalProps) {
               <Download size={15} />
               <span>Descargar</span>
             </a>
+            <button
+              onClick={handleToggleRead}
+              disabled={updatingRead}
+              className="btn btn-secondary btn-sm"
+              style={{
+                padding: "0.6rem 1.1rem",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.4rem",
+                background: isRead ? "rgba(16, 185, 129, 0.16)" : undefined,
+                borderColor: isRead ? "rgba(16, 185, 129, 0.45)" : undefined,
+                color: isRead ? "#6ee7b7" : undefined,
+              }}
+              title={isRead ? "Haz clic para marcar como no leído" : "Marcar como leído"}
+            >
+              <BookCheck size={15} style={{ color: isRead ? "#34d399" : "var(--text-muted)" }} />
+              <span>{isRead ? "Leído" : "Marcar Leído"}</span>
+            </button>
           </div>
 
           <button onClick={onClose} className="btn btn-secondary btn-sm" style={{ padding: "0.6rem 1.2rem" }}>
