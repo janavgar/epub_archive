@@ -7,6 +7,7 @@ name = "epub-archive"
 version = "0.1.0"
 description = "Local pipeline for extracting, classifying, and searching EPUB books"
 readme = "README.md"
+license = { text = "MIT-NC" }
 requires-python = ">=3.10"
 dependencies = [
     "beautifulsoup4>=4.12",

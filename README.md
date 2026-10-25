@@ -159,3 +159,15 @@ Ejecuta la suite completa de pruebas unitarias:
 pytest
 ```
 
+---
+
+## Licencia
+
+Este proyecto está bajo la **Licencia MIT No Comercial (MIT-NC)**.
+
+- **Permitido:** Uso personal, estudio, copia, modificación y distribución con fines no comerciales.
+- **Prohibido:** La venta, reventa, sublicenciamiento o cualquier forma de explotación comercial con fines de lucro directo o indirecto.
+
+Consulta el archivo [LICENSE](LICENSE) para ver los términos completos.
+
+
