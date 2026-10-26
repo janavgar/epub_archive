@@ -11,17 +11,21 @@ import {
   ShieldCheck,
   BookCheck,
   PlusCircle,
+  Trash2,
+  Copy,
 } from "lucide-react";
 import { BookDetail } from "@/lib/db";
 import { ManualBookModal } from "./ManualBookModal";
+import { DeleteBookModal } from "./DeleteBookModal";
 
 interface BooksViewProps {
   onSelectBook: (book: BookDetail) => void;
   onBookUpdated?: (book: BookDetail) => void;
+  onNavigateDuplicates?: () => void;
   initialCategory?: string;
 }
 
-export function BooksView({ onSelectBook, onBookUpdated, initialCategory }: BooksViewProps) {
+export function BooksView({ onSelectBook, onBookUpdated, onNavigateDuplicates, initialCategory }: BooksViewProps) {
   const [books, setBooks] = useState<BookDetail[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -31,11 +35,14 @@ export function BooksView({ onSelectBook, onBookUpdated, initialCategory }: Book
   const [updatingBookId, setUpdatingBookId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [totalCount, setTotalCount] = useState(0);
+  const [duplicateCount, setDuplicateCount] = useState(0);
   const [page, setPage] = useState(1);
   const pageSize = 36;
 
   const [categories, setCategories] = useState<string[]>([]);
   const [manualModalOpen, setManualModalOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<BookDetail | null>(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
   useEffect(() => {
     fetch("/api/stats")
@@ -43,6 +50,9 @@ export function BooksView({ onSelectBook, onBookUpdated, initialCategory }: Book
       .then((data) => {
         if (data.topCategories) {
           setCategories(data.topCategories.map((c: any) => c.name));
+        }
+        if (typeof data.duplicateGroups === "number") {
+          setDuplicateCount(data.duplicateGroups);
         }
       })
       .catch(() => {});
@@ -134,6 +144,23 @@ export function BooksView({ onSelectBook, onBookUpdated, initialCategory }: Book
         </div>
 
         <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
+          {onNavigateDuplicates && duplicateCount > 0 && (
+            <button
+              onClick={onNavigateDuplicates}
+              className="btn btn-secondary"
+              style={{
+                fontSize: "0.86rem",
+                borderColor: "rgba(244, 63, 94, 0.4)",
+                color: "#fda4af",
+                background: "rgba(244, 63, 94, 0.1)",
+              }}
+              title="Detectar y eliminar libros duplicados"
+            >
+              <Copy size={15} style={{ color: "#f43f5e" }} />
+              <span>Duplicados ({duplicateCount})</span>
+            </button>
+          )}
+
           <button
             onClick={() => setManualModalOpen(true)}
             className="btn btn-primary"
@@ -362,6 +389,23 @@ export function BooksView({ onSelectBook, onBookUpdated, initialCategory }: Book
                     <BookCheck size={12} style={{ color: book.is_read ? "#34d399" : "var(--text-muted)" }} />
                     <span>{book.is_read ? "Leído" : "Leído?"}</span>
                   </button>
+
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeleteTarget(book);
+                      setDeleteModalOpen(true);
+                    }}
+                    className="btn btn-sm btn-danger"
+                    style={{
+                      padding: "0.22rem 0.45rem",
+                      fontSize: "0.72rem",
+                      borderRadius: "6px",
+                    }}
+                    title="Eliminar este libro"
+                  >
+                    <Trash2 size={12} />
+                  </button>
                   <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>{book.chunk_count} chunks</span>
                 </div>
               </div>
@@ -461,6 +505,23 @@ export function BooksView({ onSelectBook, onBookUpdated, initialCategory }: Book
                 <span style={{ fontSize: "0.82rem", color: "var(--text-muted)", width: "80px", textAlign: "right" }}>
                   {book.chunk_count} chunks
                 </span>
+
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDeleteTarget(book);
+                    setDeleteModalOpen(true);
+                  }}
+                  className="btn btn-sm btn-danger"
+                  style={{
+                    padding: "0.35rem 0.65rem",
+                    fontSize: "0.78rem",
+                    borderRadius: "6px",
+                  }}
+                  title="Eliminar libro"
+                >
+                  <Trash2 size={13} />
+                </button>
               </div>
             </div>
           ))}
@@ -506,6 +567,23 @@ export function BooksView({ onSelectBook, onBookUpdated, initialCategory }: Book
           if (onBookUpdated) onBookUpdated(newBook);
         }}
         availableCategories={categories}
+      />
+
+      {/* Delete Book Modal */}
+      <DeleteBookModal
+        isOpen={deleteModalOpen}
+        book={deleteTarget}
+        onClose={() => {
+          setDeleteModalOpen(false);
+          setDeleteTarget(null);
+        }}
+        onDeleted={(bookId) => {
+          setBooks((prev) => prev.filter((b) => b.id !== bookId));
+          setTotalCount((c) => Math.max(0, c - 1));
+          loadBooks();
+          if (onBookUpdated && deleteTarget) onBookUpdated(deleteTarget);
+        }}
+        initialDeleteFile={false}
       />
     </div>
   );

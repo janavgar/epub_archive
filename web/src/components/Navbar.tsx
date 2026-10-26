@@ -13,15 +13,17 @@ import {
   X,
   ChevronRight,
   Cpu,
+  Copy,
 } from "lucide-react";
 
-export type NavTab = "dashboard" | "books" | "errors" | "search" | "cluster" | "process";
+export type NavTab = "dashboard" | "books" | "duplicates" | "errors" | "search" | "cluster" | "process";
 
 interface NavbarProps {
   currentTab: NavTab;
   onSelectTab: (tab: NavTab) => void;
   totalBooks?: number;
   errorBooks?: number;
+  duplicateGroups?: number;
 }
 
 interface NavItem {
@@ -33,7 +35,7 @@ interface NavItem {
   isAlert?: boolean;
 }
 
-export function Navbar({ currentTab, onSelectTab, totalBooks, errorBooks }: NavbarProps) {
+export function Navbar({ currentTab, onSelectTab, totalBooks, errorBooks, duplicateGroups }: NavbarProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [modelStatus, setModelStatus] = useState<{
     online: boolean;
@@ -99,6 +101,13 @@ export function Navbar({ currentTab, onSelectTab, totalBooks, errorBooks }: Navb
       description: "Catálogo completo con filtros y estado de lectura",
       icon: BookOpen,
       count: totalBooks,
+    },
+    {
+      id: "duplicates",
+      label: "Duplicados",
+      description: "Detección y eliminación de libros redundantes",
+      icon: Copy,
+      count: duplicateGroups,
     },
     {
       id: "errors",

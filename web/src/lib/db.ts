@@ -2,6 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import path from "node:path";
 import fs from "node:fs";
 import crypto from "node:crypto";
+import { spawn } from "node:child_process";
 
 // Resolve database path relative to the workspace root
 const DB_PATH = path.resolve(process.cwd(), "..", ".epub_archive", "archive.sqlite3");
@@ -103,6 +104,18 @@ export function getArchiveStats() {
   const errorBooks = (db.prepare("SELECT COUNT(*) as c FROM books WHERE status = 'error'").get() as any)?.c || 0;
   const readBooks = (db.prepare("SELECT COUNT(*) as c FROM books WHERE is_read = 1").get() as any)?.c || 0;
   const totalChunks = (db.prepare("SELECT COUNT(*) as c FROM chunks").get() as any)?.c || 0;
+  const duplicateGroups =
+    (db.prepare(`
+      SELECT COUNT(*) as c FROM (
+        SELECT sha256 FROM books WHERE sha256 != '' GROUP BY sha256 HAVING COUNT(*) > 1
+        UNION
+        SELECT LOWER(TRIM(title)) || '___' || LOWER(TRIM(author))
+        FROM books
+        WHERE title != '' AND title != '...'
+        GROUP BY LOWER(TRIM(title)), LOWER(TRIM(author))
+        HAVING COUNT(*) > 1
+      )
+    `).get() as any)?.c || 0;
 
   const rows = db.prepare("SELECT categories_json FROM books WHERE status = 'done'").all() as any[];
   const categoryCounts: Record<string, number> = {};
@@ -135,6 +148,7 @@ export function getArchiveStats() {
     errorBooks,
     readBooks,
     totalChunks,
+    duplicateGroups,
     topCategories,
     clusters: clusterRows,
     recentBooks,
@@ -389,12 +403,303 @@ export function saveManualBook(input: ManualBookInput): BookDetail {
   return updated;
 }
 
-export function deleteBook(id: string): boolean {
+export interface DeleteBookResult {
+  success: boolean;
+  fileDeleted: boolean;
+  filePath: string;
+  error?: string;
+  book?: BookDetail;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+}
+
+export function deleteBook(id: string, deleteFile: boolean = false): DeleteBookResult {
   const db = getDb();
-  const existing = db.prepare("SELECT id FROM books WHERE id = ?").get(id);
-  if (!existing) return false;
+  const bookRow = db.prepare("SELECT * FROM books WHERE id = ?").get(id);
+  if (!bookRow) {
+    return {
+      success: false,
+      fileDeleted: false,
+      filePath: id,
+      error: "Libro no encontrado en la base de datos.",
+    };
+  }
+
+  const book = parseBookRow(bookRow);
+  const filePath = book.id;
+
+  // 1. Delete associated chunks from SQLite
   db.prepare("DELETE FROM chunks WHERE book_id = ?").run(id);
+
+  // 2. Delete book record from SQLite
   db.prepare("DELETE FROM books WHERE id = ?").run(id);
-  return true;
+
+  // 3. If requested, delete physical file from storage/disk
+  let fileDeleted = false;
+  if (deleteFile) {
+    try {
+      if (fs.existsSync(filePath)) {
+        const stat = fs.statSync(filePath);
+        if (stat.isFile()) {
+          fs.unlinkSync(filePath);
+          fileDeleted = true;
+        }
+      }
+    } catch (err: any) {
+      console.error(`Error al eliminar archivo físico ${filePath}:`, err);
+    }
+  }
+
+  // 4. Asynchronously invoke python CLI to clean up vector embeddings from ChromaDB
+  try {
+    const projectRoot = path.resolve(process.cwd(), "..");
+    const proc = spawn("uv", ["run", "epub-archive", "delete", id], {
+      cwd: projectRoot,
+      detached: true,
+      stdio: "ignore",
+    });
+    proc.unref();
+  } catch (err) {
+    // Non-blocking background vector cleanup
+  }
+
+  return {
+    success: true,
+    fileDeleted,
+    filePath,
+    book,
+  };
+}
+
+export interface DuplicateBookItem extends BookDetail {
+  file_exists: boolean;
+  file_size_bytes?: number;
+  file_size_formatted?: string;
+  filename: string;
+}
+
+export interface DuplicateGroup {
+  key: string;
+  type: "sha256" | "title_author";
+  title: string;
+  author: string;
+  count: number;
+  books: DuplicateBookItem[];
+}
+
+export function getDuplicateGroups(options?: {
+  type?: "all" | "sha256" | "title_author";
+  search?: string;
+}) {
+  const db = getDb();
+  const filterType = options?.type || "all";
+  const search = options?.search ? options.search.trim().toLowerCase() : "";
+
+  const groups: DuplicateGroup[] = [];
+  const processedShaPairs = new Set<string>();
+
+  // 1. Exact SHA-256 duplicates
+  if (filterType === "all" || filterType === "sha256") {
+    const shaRows = db.prepare(`
+      SELECT sha256, COUNT(*) as c
+      FROM books
+      WHERE sha256 != ''
+      GROUP BY sha256
+      HAVING c > 1
+      ORDER BY c DESC
+    `).all() as any[];
+
+    for (const r of shaRows) {
+      const booksRows = db.prepare(`
+        SELECT * FROM books WHERE sha256 = ? ORDER BY title COLLATE NOCASE
+      `).all(r.sha256) as any[];
+
+      if (booksRows.length > 1) {
+        const first = booksRows[0];
+        const title = first.title || "Sin título";
+        const author = first.author || "Desconocido";
+
+        if (search && !title.toLowerCase().includes(search) && !author.toLowerCase().includes(search)) {
+          continue;
+        }
+
+        const items: DuplicateBookItem[] = booksRows.map((b) => {
+          let exists = false;
+          let size: number | undefined;
+          let sizeFmt: string | undefined;
+          try {
+            if (fs.existsSync(b.id)) {
+              exists = true;
+              const s = fs.statSync(b.id);
+              size = s.size;
+              sizeFmt = formatBytes(s.size);
+            }
+          } catch {}
+
+          return {
+            ...parseBookRow(b),
+            file_exists: exists,
+            file_size_bytes: size,
+            file_size_formatted: sizeFmt,
+            filename: path.basename(b.id),
+          };
+        });
+
+        processedShaPairs.add(`${title.trim().toLowerCase()}___${author.trim().toLowerCase()}`);
+
+        groups.push({
+          key: r.sha256,
+          type: "sha256",
+          title,
+          author,
+          count: items.length,
+          books: items,
+        });
+      }
+    }
+  }
+
+  // 2. Title & Author matching duplicates (normalized)
+  if (filterType === "all" || filterType === "title_author") {
+    const titleAuthorRows = db.prepare(`
+      SELECT LOWER(TRIM(title)) as norm_title, LOWER(TRIM(author)) as norm_author, COUNT(*) as c
+      FROM books
+      WHERE title != '' AND title != '...'
+      GROUP BY LOWER(TRIM(title)), LOWER(TRIM(author))
+      HAVING c > 1
+      ORDER BY c DESC
+    `).all() as any[];
+
+    for (const r of titleAuthorRows) {
+      const pairKey = `${r.norm_title}___${r.norm_author}`;
+      if (filterType === "all" && processedShaPairs.has(pairKey)) {
+        continue;
+      }
+
+      if (search && !r.norm_title.includes(search) && !r.norm_author.includes(search)) {
+        continue;
+      }
+
+      const booksRows = db.prepare(`
+        SELECT * FROM books
+        WHERE LOWER(TRIM(title)) = ? AND LOWER(TRIM(author)) = ?
+        ORDER BY id
+      `).all(r.norm_title, r.norm_author) as any[];
+
+      if (booksRows.length > 1) {
+        const first = booksRows[0];
+        const title = first.title || "Sin título";
+        const author = first.author || "Desconocido";
+
+        const items: DuplicateBookItem[] = booksRows.map((b) => {
+          let exists = false;
+          let size: number | undefined;
+          let sizeFmt: string | undefined;
+          try {
+            if (fs.existsSync(b.id)) {
+              exists = true;
+              const s = fs.statSync(b.id);
+              size = s.size;
+              sizeFmt = formatBytes(s.size);
+            }
+          } catch {}
+
+          return {
+            ...parseBookRow(b),
+            file_exists: exists,
+            file_size_bytes: size,
+            file_size_formatted: sizeFmt,
+            filename: path.basename(b.id),
+          };
+        });
+
+        groups.push({
+          key: pairKey,
+          type: "title_author",
+          title,
+          author,
+          count: items.length,
+          books: items,
+        });
+      }
+    }
+  }
+
+  const totalDuplicateBooks = groups.reduce((acc, g) => acc + g.books.length, 0);
+  const sha256Groups = groups.filter((g) => g.type === "sha256").length;
+  const titleAuthorGroups = groups.filter((g) => g.type === "title_author").length;
+
+  return {
+    summary: {
+      totalGroups: groups.length,
+      totalDuplicateBooks,
+      sha256Groups,
+      titleAuthorGroups,
+    },
+    groups,
+  };
+}
+
+export function getBookDuplicates(bookId: string): { count: number; duplicates: DuplicateBookItem[] } {
+  const db = getDb();
+  const current = db.prepare("SELECT * FROM books WHERE id = ?").get(bookId) as any;
+  if (!current) {
+    return { count: 0, duplicates: [] };
+  }
+
+  const normTitle = (current.title || "").trim().toLowerCase();
+  const normAuthor = (current.author || "").trim().toLowerCase();
+  const sha256 = current.sha256 || "";
+
+  let rows: any[] = [];
+  if (sha256 && normTitle) {
+    rows = db.prepare(`
+      SELECT * FROM books
+      WHERE id != ? AND (sha256 = ? OR (LOWER(TRIM(title)) = ? AND LOWER(TRIM(author)) = ?))
+      ORDER BY title COLLATE NOCASE
+    `).all(bookId, sha256, normTitle, normAuthor) as any[];
+  } else if (sha256) {
+    rows = db.prepare(`
+      SELECT * FROM books WHERE id != ? AND sha256 = ?
+    `).all(bookId, sha256) as any[];
+  } else if (normTitle) {
+    rows = db.prepare(`
+      SELECT * FROM books
+      WHERE id != ? AND LOWER(TRIM(title)) = ? AND LOWER(TRIM(author)) = ?
+    `).all(bookId, normTitle, normAuthor) as any[];
+  }
+
+  const duplicates: DuplicateBookItem[] = rows.map((b) => {
+    let exists = false;
+    let size: number | undefined;
+    let sizeFmt: string | undefined;
+    try {
+      if (fs.existsSync(b.id)) {
+        exists = true;
+        const s = fs.statSync(b.id);
+        size = s.size;
+        sizeFmt = formatBytes(s.size);
+      }
+    } catch {}
+
+    return {
+      ...parseBookRow(b),
+      file_exists: exists,
+      file_size_bytes: size,
+      file_size_formatted: sizeFmt,
+      filename: path.basename(b.id),
+    };
+  });
+
+  return {
+    count: duplicates.length,
+    duplicates,
+  };
 }
 

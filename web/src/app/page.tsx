@@ -8,6 +8,7 @@ import { SemanticSearchView } from "@/components/SemanticSearchView";
 import { ClusteringView } from "@/components/ClusteringView";
 import { ProcessView } from "@/components/ProcessView";
 import { ErrorsView } from "@/components/ErrorsView";
+import { DuplicatesView } from "@/components/DuplicatesView";
 import { BookDetailModal } from "@/components/BookDetailModal";
 import { ManualBookModal } from "@/components/ManualBookModal";
 import { BookDetail } from "@/lib/db";
@@ -56,6 +57,7 @@ export default function Home() {
         }}
         totalBooks={stats?.totalBooks}
         errorBooks={stats?.errorBooks}
+        duplicateGroups={stats?.duplicateGroups}
       />
 
       {/* Main View Area with generous edge margins */}
@@ -76,7 +78,18 @@ export default function Home() {
           <BooksView
             onSelectBook={setSelectedBook}
             onBookUpdated={() => refreshStats()}
+            onNavigateDuplicates={() => {
+              setFilterCategory("");
+              setCurrentTab("duplicates");
+            }}
             initialCategory={filterCategory}
+          />
+        )}
+
+        {currentTab === "duplicates" && (
+          <DuplicatesView
+            onSelectBook={setSelectedBook}
+            onRefreshStats={refreshStats}
           />
         )}
 
@@ -124,6 +137,15 @@ export default function Home() {
           setSelectedBook(null);
           setManualBook(book);
           setManualModalOpen(true);
+        }}
+        onDeleteBook={() => {
+          setSelectedBook(null);
+          refreshStats();
+        }}
+        onNavigateDuplicates={() => {
+          setSelectedBook(null);
+          setFilterCategory("");
+          setCurrentTab("duplicates");
         }}
       />
 

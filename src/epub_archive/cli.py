@@ -143,7 +143,29 @@ def _parser() -> argparse.ArgumentParser:
     manual_parser.add_argument("--description", default="", help="Sinopsis o descripción del libro.")
     manual_parser.add_argument("--original-title", default="", help="Título original.")
     manual_parser.add_argument("--original-author", default="", help="Autor original.")
-    manual_parser.add_argument("--content", default="", help="Fragmento o texto representativo del libro.")
+    # Delete Command
+    delete_parser = subparsers.add_parser(
+        "delete", help="Elimina un libro de la base de datos y opcionalmente del almacenamiento físico."
+    )
+    _add_runtime_options(delete_parser, defaults=False)
+    delete_parser.add_argument("book_id", help="Ruta o ID del libro a eliminar.")
+    delete_parser.add_argument(
+        "--delete-file",
+        action="store_true",
+        help="Elimina también permanentemente el archivo .epub del disco.",
+    )
+
+    # Duplicates Command
+    dup_parser = subparsers.add_parser(
+        "duplicates", help="Identifica libros duplicados por hash SHA-256 o por título y autor."
+    )
+    _add_runtime_options(dup_parser, defaults=False)
+    dup_parser.add_argument(
+        "--by",
+        choices=["sha256", "title", "both"],
+        default="both",
+        help="Criterio de detección: 'sha256' (idénticos), 'title' (mismo título y autor) o 'both' (ambos).",
+    )
 
     return parser
 
@@ -301,6 +323,37 @@ def main() -> None:
                 print(f"  • Categorías: {', '.join(book['categories'])}")
             print(f"  • Estado    : {book['status']}")
             print()
+
+        elif args.command == "delete":
+            deleted = storage.delete_book(args.book_id, delete_file=args.delete_file)
+            if deleted:
+                msg = f"Libro eliminado de la base de datos (SQLite y ChromaDB): '{args.book_id}'"
+                if args.delete_file:
+                    msg += " y del almacenamiento físico en disco."
+                else:
+                    msg += " (archivo físico conservado en disco)."
+                print(msg)
+            else:
+                print(f"Error: No se encontró ningún libro con identificador '{args.book_id}'.", file=sys.stderr)
+                raise SystemExit(1)
+
+        elif args.command == "duplicates":
+            groups = storage.find_duplicates(by=args.by)
+            if not groups:
+                print(f"No se detectaron libros duplicados en el archivo (criterio: {args.by}).")
+                return
+
+            total_dupes = sum(len(g["books"]) for g in groups)
+            print(f"\n=== LIBROS DUPLICADOS DETECTADOS ===")
+            print(f"Total grupos: {len(groups)} | Total libros implicados: {total_dupes}\n")
+
+            for idx, g in enumerate(groups, start=1):
+                type_desc = "Hash SHA-256 idéntico" if g["type"] == "sha256" else "Mismo título y autor"
+                print(f"[{idx}] {g['title']} — {g['author']} ({g['count']} copias) [{type_desc}]")
+                for b in g["books"]:
+                    exists_str = "Existe en disco" if b.get("file_exists") else "NO encontrado en disco"
+                    print(f"    • [{b['status']}] {b['id']} ({exists_str})")
+                print()
 
     except (ValueError, RuntimeError) as exc:
         parser.exit(1, f"Error: {exc}\n")

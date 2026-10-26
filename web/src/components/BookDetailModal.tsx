@@ -12,17 +12,30 @@ import {
   FolderOpen,
   BookCheck,
   Edit3,
+  Trash2,
+  AlertCircle,
+  Copy as CopyIcon,
 } from "lucide-react";
 import { BookDetail } from "@/lib/db";
+import { DeleteBookModal } from "./DeleteBookModal";
 
 interface BookDetailModalProps {
   book: BookDetail | null;
   onClose: () => void;
   onToggleRead?: (book: BookDetail) => void;
   onEditManual?: (book: BookDetail) => void;
+  onDeleteBook?: (bookId: string, fileDeleted: boolean) => void;
+  onNavigateDuplicates?: () => void;
 }
 
-export function BookDetailModal({ book, onClose, onToggleRead, onEditManual }: BookDetailModalProps) {
+export function BookDetailModal({
+  book,
+  onClose,
+  onToggleRead,
+  onEditManual,
+  onDeleteBook,
+  onNavigateDuplicates,
+}: BookDetailModalProps) {
   const [fullDetail, setFullDetail] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<"summary" | "chunks" | "metadata">("summary");
@@ -30,15 +43,19 @@ export function BookDetailModal({ book, onClose, onToggleRead, onEditManual }: B
   const [openingApp, setOpeningApp] = useState(false);
   const [openStatus, setOpenStatus] = useState<string | null>(null);
   const [updatingRead, setUpdatingRead] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [duplicateCount, setDuplicateCount] = useState(0);
 
   useEffect(() => {
     if (!book) {
       setFullDetail(null);
       setOpenStatus(null);
+      setDuplicateCount(0);
       return;
     }
     setActiveTab("summary");
     setLoading(true);
+
     fetch(`/api/books?id=${encodeURIComponent(book.id)}`)
       .then((res) => res.json())
       .then((data) => {
@@ -48,6 +65,16 @@ export function BookDetailModal({ book, onClose, onToggleRead, onEditManual }: B
       })
       .catch(() => {})
       .finally(() => setLoading(false));
+
+    // Fetch duplicate occurrences for this book
+    fetch(`/api/books/${encodeURIComponent(book.id)}/duplicates`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && typeof data.count === "number") {
+          setDuplicateCount(data.count);
+        }
+      })
+      .catch(() => {});
   }, [book]);
 
   if (!book) return null;
@@ -184,6 +211,51 @@ export function BookDetailModal({ book, onClose, onToggleRead, onEditManual }: B
             </button>
           </div>
         </div>
+
+        {/* Duplicate Warning Banner if this book has duplicates */}
+        {duplicateCount > 0 && (
+          <div
+            style={{
+              padding: "0.85rem 1.25rem",
+              background: "rgba(244, 63, 94, 0.12)",
+              borderBottom: "1px solid rgba(244, 63, 94, 0.25)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "1rem",
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", color: "#fda4af", fontSize: "0.86rem" }}>
+              <AlertCircle size={17} style={{ color: "#f43f5e", flexShrink: 0 }} />
+              <span>
+                <strong>Atención:</strong> Se ha detectado{" "}
+                <strong>{duplicateCount} copia{duplicateCount > 1 ? "s" : ""} duplicada{duplicateCount > 1 ? "s" : ""}</strong> de este libro en el archivo.
+              </span>
+            </div>
+
+            {onNavigateDuplicates && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onNavigateDuplicates();
+                }}
+                className="btn btn-sm btn-danger"
+                style={{
+                  padding: "0.3rem 0.75rem",
+                  fontSize: "0.76rem",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.35rem",
+                }}
+              >
+                <CopyIcon size={13} />
+                <span>Gestionar Duplicados</span>
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Modal Tabs */}
         <div className="modal-tabs">
@@ -515,6 +587,22 @@ export function BookDetailModal({ book, onClose, onToggleRead, onEditManual }: B
               <BookCheck size={15} style={{ color: isRead ? "#34d399" : "var(--text-muted)" }} />
               <span>{isRead ? "Leído" : "Marcar Leído"}</span>
             </button>
+
+            <button
+              onClick={() => setDeleteModalOpen(true)}
+              className="btn btn-danger btn-sm"
+              style={{
+                padding: "0.6rem 1.15rem",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.45rem",
+                fontWeight: 600,
+              }}
+              title="Eliminar este libro de la base de datos o almacenamiento físico"
+            >
+              <Trash2 size={15} />
+              <span>Eliminar</span>
+            </button>
           </div>
 
           <button onClick={onClose} className="btn btn-secondary btn-sm" style={{ padding: "0.6rem 1.2rem" }}>
@@ -522,6 +610,21 @@ export function BookDetailModal({ book, onClose, onToggleRead, onEditManual }: B
           </button>
         </div>
       </div>
+
+      {/* Delete Book Confirmation Modal */}
+      <DeleteBookModal
+        isOpen={deleteModalOpen}
+        book={fullDetail || book}
+        onClose={() => setDeleteModalOpen(false)}
+        onDeleted={(bookId, fileDeleted) => {
+          setDeleteModalOpen(false);
+          onClose();
+          if (onDeleteBook) {
+            onDeleteBook(bookId, fileDeleted);
+          }
+        }}
+        initialDeleteFile={duplicateCount > 0}
+      />
     </div>
   );
 }

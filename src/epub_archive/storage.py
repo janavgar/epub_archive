@@ -376,8 +376,9 @@ class Storage:
             "keywords": json.loads(row["keywords_json"]),
         }
 
-    def delete_book(self, book_id: str) -> bool:
-        """Elimina un libro de SQLite, sus fragmentos asociados y sus vectores en ChromaDB."""
+    def delete_book(self, book_id: str, delete_file: bool = False) -> bool:
+        """Elimina un libro de SQLite, sus fragmentos asociados y sus vectores en ChromaDB.
+        Si delete_file es True, elimina también el archivo físico (.epub) del almacenamiento."""
         row = self.db.execute("SELECT id FROM books WHERE id = ?", (book_id,)).fetchone()
         if not row:
             return False
@@ -388,7 +389,109 @@ class Storage:
             self.collection.delete(where={"book_id": book_id})
         except Exception:
             pass
+
+        if delete_file:
+            try:
+                p = Path(book_id)
+                if p.is_file():
+                    p.unlink(missing_ok=True)
+                    logger.info("Archivo físico eliminado: %s", book_id)
+            except Exception as exc:
+                logger.warning("No se pudo eliminar el archivo físico %s: %s", book_id, exc)
+
         return True
+
+    def find_duplicates(self, by: str = "both") -> list[dict[str, Any]]:
+        """Identifica libros duplicados en el archivo por hash SHA-256 o por título y autor."""
+        groups: list[dict[str, Any]] = []
+
+        if by in ("sha256", "both"):
+            rows = self.db.execute(
+                """
+                SELECT sha256, COUNT(*) as count
+                FROM books
+                WHERE sha256 != ''
+                GROUP BY sha256
+                HAVING count > 1
+                ORDER BY count DESC
+                """
+            ).fetchall()
+
+            for r in rows:
+                sha = r["sha256"]
+                book_rows = self.db.execute(
+                    "SELECT * FROM books WHERE sha256 = ? ORDER BY title COLLATE NOCASE", (sha,)
+                ).fetchall()
+                first = book_rows[0]
+                groups.append({
+                    "key": sha,
+                    "type": "sha256",
+                    "title": first["title"],
+                    "author": first["author"],
+                    "count": len(book_rows),
+                    "books": [
+                        {
+                            **dict(b),
+                            "file_exists": Path(b["id"]).is_file(),
+                            "categories": json.loads(b["categories_json"]),
+                            "keywords": json.loads(b["keywords_json"]),
+                        }
+                        for b in book_rows
+                    ],
+                })
+
+        if by in ("title", "both"):
+            # Excluir grupos que ya son exactamente idénticos en sha256 para evitar duplicar reportes
+            existing_sha_pairs = set()
+            if by == "both":
+                for g in groups:
+                    existing_sha_pairs.add((g["title"].strip().casefold(), g["author"].strip().casefold()))
+
+            rows = self.db.execute(
+                """
+                SELECT LOWER(TRIM(title)) as norm_title, LOWER(TRIM(author)) as norm_author, COUNT(*) as count
+                FROM books
+                WHERE title != '' AND title != '...'
+                GROUP BY LOWER(TRIM(title)), LOWER(TRIM(author))
+                HAVING count > 1
+                ORDER BY count DESC
+                """
+            ).fetchall()
+
+            for r in rows:
+                norm_title = r["norm_title"]
+                norm_author = r["norm_author"]
+                if (norm_title, norm_author) in existing_sha_pairs:
+                    continue
+
+                book_rows = self.db.execute(
+                    """
+                    SELECT * FROM books
+                    WHERE LOWER(TRIM(title)) = ? AND LOWER(TRIM(author)) = ?
+                    ORDER BY id
+                    """,
+                    (norm_title, norm_author),
+                ).fetchall()
+                if len(book_rows) > 1:
+                    first = book_rows[0]
+                    groups.append({
+                        "key": f"{norm_title}___{norm_author}",
+                        "type": "title_author",
+                        "title": first["title"],
+                        "author": first["author"],
+                        "count": len(book_rows),
+                        "books": [
+                            {
+                                **dict(b),
+                                "file_exists": Path(b["id"]).is_file(),
+                                "categories": json.loads(b["categories_json"]),
+                                "keywords": json.loads(b["keywords_json"]),
+                            }
+                            for b in book_rows
+                        ],
+                    })
+
+        return groups
 
     def search(
         self,

@@ -14,10 +14,12 @@ import {
   PlayCircle,
   Edit3,
   PlusCircle,
+  Trash2,
 } from "lucide-react";
 import { BookDetail } from "@/lib/db";
 import { NavTab } from "./Navbar";
 import { ManualBookModal } from "./ManualBookModal";
+import { DeleteBookModal } from "./DeleteBookModal";
 
 interface ErrorsViewProps {
   onSelectBook: (book: BookDetail) => void;
@@ -38,6 +40,8 @@ export function ErrorsView({ onSelectBook, onNavigate, onRefreshStats, available
   const [actionStatus, setActionStatus] = useState<string | null>(null);
   const [manualModalOpen, setManualModalOpen] = useState(false);
   const [selectedForManual, setSelectedForManual] = useState<BookDetail | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<BookDetail | null>(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
   const loadErrors = useCallback(async () => {
     setLoading(true);
@@ -471,6 +475,18 @@ export function ErrorsView({ onSelectBook, onNavigate, onRefreshStats, available
                       <BookOpen size={14} />
                       <span>Ver Ficha</span>
                     </button>
+
+                    <button
+                      onClick={() => {
+                        setDeleteTarget(book);
+                        setDeleteModalOpen(true);
+                      }}
+                      className="btn btn-sm btn-danger"
+                      title="Eliminar este libro de la base de datos o almacenamiento físico"
+                    >
+                      <Trash2 size={14} />
+                      <span>Eliminar</span>
+                    </button>
                   </div>
                 </div>
 
@@ -556,6 +572,27 @@ export function ErrorsView({ onSelectBook, onNavigate, onRefreshStats, available
           setTimeout(() => setActionStatus(null), 5000);
         }}
         availableCategories={availableCategories}
+      />
+
+      {/* Delete Book Modal */}
+      <DeleteBookModal
+        isOpen={deleteModalOpen}
+        book={deleteTarget}
+        onClose={() => {
+          setDeleteModalOpen(false);
+          setDeleteTarget(null);
+        }}
+        onDeleted={(bookId, fileDeleted) => {
+          setErrorBooks((prev) => prev.filter((b) => b.id !== bookId));
+          if (onRefreshStats) onRefreshStats();
+          setActionStatus(
+            fileDeleted
+              ? "Libro eliminado de la base de datos y archivo físico eliminado del almacenamiento."
+              : "Libro eliminado de la base de datos."
+          );
+          setTimeout(() => setActionStatus(null), 4000);
+        }}
+        initialDeleteFile={true}
       />
     </div>
   );

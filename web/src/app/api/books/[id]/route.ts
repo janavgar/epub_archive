@@ -27,13 +27,41 @@ export async function DELETE(
   try {
     const { id } = await params;
     const decodedId = decodeURIComponent(id);
-    const success = deleteBook(decodedId);
 
-    if (!success) {
-      return NextResponse.json({ error: "Libro no encontrado para eliminar" }, { status: 404 });
+    // Parse deleteFile option from query param or JSON body
+    let deleteFile = false;
+    const { searchParams } = new URL(request.url);
+    if (searchParams.get("deleteFile") === "true") {
+      deleteFile = true;
+    } else {
+      try {
+        const body = await request.json();
+        if (body && (body.deleteFile === true || body.delete_file === true)) {
+          deleteFile = true;
+        }
+      } catch {
+        // Body might be empty, that's fine
+      }
     }
 
-    return NextResponse.json({ success: true, id: decodedId });
+    const result = deleteBook(decodedId, deleteFile);
+
+    if (!result.success) {
+      return NextResponse.json(
+        { error: result.error || "Libro no encontrado para eliminar" },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      id: decodedId,
+      fileDeleted: result.fileDeleted,
+      filePath: result.filePath,
+      message: result.fileDeleted
+        ? "Libro eliminado de la base de datos y archivo físico eliminado del disco."
+        : "Libro eliminado de la base de datos (archivo físico conservado en disco).",
+    });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

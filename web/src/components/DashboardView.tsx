@@ -14,6 +14,7 @@ import {
   ArrowRight,
   TrendingUp,
   BookCheck,
+  Copy,
 } from "lucide-react";
 import { BookDetail } from "@/lib/db";
 import { NavTab } from "./Navbar";
@@ -23,6 +24,7 @@ interface DashboardStats {
   doneBooks: number;
   errorBooks: number;
   readBooks?: number;
+  duplicateGroups?: number;
   totalChunks: number;
   topCategories: Array<{ name: string; count: number }>;
   clusters: Array<{ cluster_id: number; cluster_label: string; count: number }>;
@@ -201,6 +203,29 @@ export function DashboardView({
           </div>
           <div className="stat-footer">
             Agrupados por HDBSCAN
+          </div>
+        </div>
+
+        {/* Card 6: Libros Duplicados */}
+        <div
+          className="stat-card"
+          onClick={() => onNavigate("duplicates")}
+          style={{ cursor: "pointer", borderLeft: "3px solid #f43f5e" }}
+          title="Ver y limpiar libros duplicados"
+        >
+          <div className="stat-header">
+            <span className="stat-label">Libros Duplicados</span>
+            <div className="stat-icon" style={{ background: "rgba(244, 63, 94, 0.15)", color: "#f43f5e" }}>
+              <Copy size={20} />
+            </div>
+          </div>
+          <div>
+            <div className="stat-value" style={{ color: "#fda4af" }}>{stats.duplicateGroups ?? 0}</div>
+            <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>grupos redundantes</span>
+          </div>
+          <div className="stat-footer" style={{ display: "flex", alignItems: "center", gap: "0.4rem", color: "#fda4af" }}>
+            <span>Gestionar y liberar espacio</span>
+            <ArrowRight size={13} />
           </div>
         </div>
       </div>

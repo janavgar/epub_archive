@@ -122,3 +122,83 @@ def test_storage_save_manual_book_recovers_error_and_deletes(tmp_path):
     finally:
         storage.close()
 
+
+def test_delete_book_with_file_and_find_duplicates(tmp_path):
+    storage = Storage(tmp_path)
+    try:
+        # Create dummy epub files on disk
+        file1 = tmp_path / "book1.epub"
+        file2 = tmp_path / "book2.epub"
+        file3 = tmp_path / "book3.epub"
+        file1.write_bytes(b"dummy epub 1")
+        file2.write_bytes(b"dummy epub 2")
+        file3.write_bytes(b"dummy epub 3")
+
+        # Save duplicate books by sha256
+        storage.save_book(
+            book_id=str(file1),
+            digest="same_sha_123",
+            classification={
+                "title": "Dune",
+                "author": "Frank Herbert",
+                "categories": ["Ciencia ficción"],
+                "summary": "Arrakis planet",
+                "keywords": ["spice"],
+            },
+            language="es",
+            chunks=[{"id": "c1", "chapter": "1", "content": "Dune part 1", "index": 0}],
+            embeddings=[[0.1, 0.2]],
+        )
+
+        storage.save_book(
+            book_id=str(file2),
+            digest="same_sha_123",
+            classification={
+                "title": "Dune (Copia)",
+                "author": "Frank Herbert",
+                "categories": ["Ciencia ficción"],
+                "summary": "Arrakis planet copy",
+                "keywords": ["spice"],
+            },
+            language="es",
+            chunks=[{"id": "c2", "chapter": "1", "content": "Dune part 1", "index": 0}],
+            embeddings=[[0.1, 0.2]],
+        )
+
+        # Save a duplicate by title and author
+        storage.save_book(
+            book_id=str(file3),
+            digest="different_sha_456",
+            classification={
+                "title": "Fundación",
+                "author": "Isaac Asimov",
+                "categories": ["Ciencia ficción"],
+                "summary": "Imperio Galáctico",
+                "keywords": ["psicohistoria"],
+            },
+            language="es",
+            chunks=[{"id": "c3", "chapter": "1", "content": "Seldon", "index": 0}],
+            embeddings=[[0.3, 0.4]],
+        )
+
+        # Duplicate detection
+        sha_dupes = storage.find_duplicates(by="sha256")
+        assert len(sha_dupes) == 1
+        assert sha_dupes[0]["count"] == 2
+        assert sha_dupes[0]["type"] == "sha256"
+
+        # Verify physical file deletion
+        assert file2.exists()
+        del_result = storage.delete_book(str(file2), delete_file=True)
+        assert del_result is True
+        assert not file2.exists()
+        assert file1.exists()
+
+        # After deleting file2, there are no more sha duplicates
+        sha_dupes_after = storage.find_duplicates(by="sha256")
+        assert len(sha_dupes_after) == 0
+
+    finally:
+        storage.close()
+
+
