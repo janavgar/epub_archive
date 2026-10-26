@@ -1,6 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import path from "node:path";
 import fs from "node:fs";
+import crypto from "node:crypto";
 
 // Resolve database path relative to the workspace root
 const DB_PATH = path.resolve(process.cwd(), "..", ".epub_archive", "archive.sqlite3");
@@ -244,3 +245,156 @@ export function getErrorBooks() {
     .map(parseBookRow);
   return rows;
 }
+
+export interface ManualBookInput {
+  id: string;
+  title: string;
+  author: string;
+  language?: string;
+  year?: string;
+  original_title?: string;
+  original_author?: string;
+  publisher?: string;
+  description?: string;
+  summary?: string;
+  categories?: string[];
+  keywords?: string[];
+  content_sample?: string;
+  chapter_title?: string;
+}
+
+export function saveManualBook(input: ManualBookInput): BookDetail {
+  const db = getDb();
+  const now = new Date().toISOString();
+
+  if (!input.id || !input.id.trim()) {
+    throw new Error("El identificador o ruta del libro es obligatorio.");
+  }
+  if (!input.title || !input.title.trim()) {
+    throw new Error("El título del libro es obligatorio.");
+  }
+  if (!input.author || !input.author.trim()) {
+    throw new Error("El autor del libro es obligatorio.");
+  }
+
+  const bookId = input.id.trim();
+  const title = input.title.trim();
+  const author = input.author.trim();
+
+  let sha256 = "";
+  const existing = db.prepare("SELECT sha256, chunk_count, chapter_count FROM books WHERE id = ?").get(bookId) as any;
+  if (existing?.sha256) {
+    sha256 = existing.sha256;
+  } else {
+    try {
+      if (fs.existsSync(bookId)) {
+        const fileBuf = fs.readFileSync(bookId);
+        sha256 = crypto.createHash("sha256").update(fileBuf).digest("hex");
+      }
+    } catch {}
+    if (!sha256) {
+      sha256 = crypto.createHash("sha256").update(bookId).digest("hex");
+    }
+  }
+
+  const categories = input.categories || [];
+  const keywords = input.keywords || [];
+  const categoriesJson = JSON.stringify(categories);
+  const keywordsJson = JSON.stringify(keywords);
+  const language = (input.language || "es").trim();
+  const year = (input.year || "").trim();
+  const originalTitle = (input.original_title || title).trim();
+  const originalAuthor = (input.original_author || author).trim();
+  const publisher = (input.publisher || "").trim();
+  const description = (input.description || "").trim();
+  const summary = (input.summary || "").trim();
+
+  let chunkCount = existing?.chunk_count || 0;
+  let chapterCount = existing?.chapter_count || 0;
+
+  if (input.content_sample && input.content_sample.trim()) {
+    const content = input.content_sample.trim();
+    const chunkId = crypto.createHash("sha256").update(`${bookId}\0manual_chunk\0${content}`).digest("hex");
+    chunkCount = 1;
+    chapterCount = 1;
+
+    db.prepare("DELETE FROM chunks WHERE book_id = ?").run(bookId);
+    db.prepare(`
+      INSERT INTO chunks (id, book_id, chapter, content, vector_id, chunk_index)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+      chunkId,
+      bookId,
+      input.chapter_title?.trim() || "Contenido Manual",
+      content,
+      chunkId,
+      0
+    );
+  } else {
+    const existingChunks = (db.prepare("SELECT COUNT(*) as c FROM chunks WHERE book_id = ?").get(bookId) as any)?.c || 0;
+    if (existingChunks > 0) {
+      chunkCount = existingChunks;
+      chapterCount = 1;
+    }
+  }
+
+  db.prepare(`
+    INSERT INTO books (
+      id, sha256, title, author, language, year,
+      original_title, original_author, publisher, description,
+      categories_json, summary, keywords_json, status, error,
+      processed_at, chunk_count, chapter_count
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'done', NULL, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      sha256 = excluded.sha256,
+      title = excluded.title,
+      author = excluded.author,
+      language = excluded.language,
+      year = excluded.year,
+      original_title = excluded.original_title,
+      original_author = excluded.original_author,
+      publisher = excluded.publisher,
+      description = excluded.description,
+      categories_json = excluded.categories_json,
+      summary = excluded.summary,
+      keywords_json = excluded.keywords_json,
+      status = 'done',
+      error = NULL,
+      processed_at = excluded.processed_at,
+      chunk_count = excluded.chunk_count,
+      chapter_count = excluded.chapter_count
+  `).run(
+    bookId,
+    sha256,
+    title,
+    author,
+    language,
+    year,
+    originalTitle,
+    originalAuthor,
+    publisher,
+    description,
+    categoriesJson,
+    summary,
+    keywordsJson,
+    now,
+    chunkCount,
+    chapterCount
+  );
+
+  const updated = getBookById(bookId);
+  if (!updated) {
+    throw new Error("No se pudo recuperar el libro actualizado tras guardar.");
+  }
+  return updated;
+}
+
+export function deleteBook(id: string): boolean {
+  const db = getDb();
+  const existing = db.prepare("SELECT id FROM books WHERE id = ?").get(id);
+  if (!existing) return false;
+  db.prepare("DELETE FROM chunks WHERE book_id = ?").run(id);
+  db.prepare("DELETE FROM books WHERE id = ?").run(id);
+  return true;
+}
+

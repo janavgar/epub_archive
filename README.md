@@ -81,6 +81,7 @@ Abre tu navegador en **[http://localhost:3000](http://localhost:3000)**.
 3. **Búsqueda Semántica con IA**: Buscador en lenguaje natural por similitud de coseno, consultas sugeridas y visualización de citas exactas.
 4. **Clustering Temático (HDBSCAN)**: Ejecución y visualización de grupos temáticos descubiertos automáticamente.
 5. **Procesador en Vivo**: Lanzador del pipeline con consola interactiva en tiempo real (SSE), barra de porcentaje animada y tiempo restante estimado (ETA).
+6. **Subsanación y Entrada Manual**: Modal interactivo para introducir o corregir libros dañados o fallidos directamente desde la vista de errores o el catálogo, permitiendo incorporarlos al archivo con categorías, resumen y fragmentos de lectura.
 
 ---
 
@@ -148,6 +149,23 @@ epub-archive list --limit 50
 # Listar únicamente libros que fallaron para inspeccionar el motivo
 epub-archive list --status error
 ```
+
+### 6. Introducir o subsanar libros manualmente
+
+Para archivos corruptos (ej. *Bad Zip file*), sin metadatos OPF o casos donde la IA o la extracción hayan fallado, puedes introducir o corregir los datos manualmente:
+
+```bash
+epub-archive manual ./mis-libros/libro_fallido.epub \
+  --title "El Quijote de la Mancha" \
+  --author "Miguel de Cervantes" \
+  --year "1605" \
+  --categories "Clásicos, Novela, Literatura española" \
+  --keywords "caballero andante, molinos, hidalgo" \
+  --summary "Aventuras del ingenioso hidalgo Don Quijote y su fiel escudero Sancho Panza." \
+  --content "En un lugar de la Mancha, de cuyo nombre no quiero acordarme..."
+```
+
+El libro se marcará automáticamente con estado `done`, limpiando el error previo e integrándolo en el catálogo y búsquedas.
 
 ---
 

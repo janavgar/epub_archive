@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   AlertTriangle,
   FolderOpen,
@@ -10,24 +10,25 @@ import {
   Download,
   BookOpen,
   RefreshCw,
-  FileCode,
   ShieldAlert,
   PlayCircle,
-  FileQuestion,
-  ChevronRight,
+  Edit3,
+  PlusCircle,
 } from "lucide-react";
 import { BookDetail } from "@/lib/db";
 import { NavTab } from "./Navbar";
+import { ManualBookModal } from "./ManualBookModal";
 
 interface ErrorsViewProps {
   onSelectBook: (book: BookDetail) => void;
   onNavigate: (tab: NavTab) => void;
   onRefreshStats?: () => void;
+  availableCategories?: string[];
 }
 
 type ErrorFilter = "all" | "corrupt" | "ai" | "structure" | "other";
 
-export function ErrorsView({ onSelectBook, onNavigate }: ErrorsViewProps) {
+export function ErrorsView({ onSelectBook, onNavigate, onRefreshStats, availableCategories }: ErrorsViewProps) {
   const [errorBooks, setErrorBooks] = useState<BookDetail[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -35,8 +36,10 @@ export function ErrorsView({ onSelectBook, onNavigate }: ErrorsViewProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [copiedReport, setCopiedReport] = useState(false);
   const [actionStatus, setActionStatus] = useState<string | null>(null);
+  const [manualModalOpen, setManualModalOpen] = useState(false);
+  const [selectedForManual, setSelectedForManual] = useState<BookDetail | null>(null);
 
-  const loadErrors = async () => {
+  const loadErrors = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch("/api/books/errors");
@@ -47,7 +50,7 @@ export function ErrorsView({ onSelectBook, onNavigate }: ErrorsViewProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadErrors();
@@ -214,8 +217,20 @@ export function ErrorsView({ onSelectBook, onNavigate }: ErrorsViewProps) {
           </button>
 
           <button
-            onClick={() => onNavigate("process")}
+            onClick={() => {
+              setSelectedForManual(null);
+              setManualModalOpen(true);
+            }}
             className="btn btn-primary"
+            title="Introducir un libro manualmente"
+          >
+            <PlusCircle size={16} />
+            <span>+ Introducir Manualmente</span>
+          </button>
+
+          <button
+            onClick={() => onNavigate("process")}
+            className="btn btn-secondary"
             title="Ir al procesador para reejecutar la extracción"
           >
             <PlayCircle size={16} />
@@ -417,6 +432,18 @@ export function ErrorsView({ onSelectBook, onNavigate }: ErrorsViewProps) {
                   {/* Actions */}
                   <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "center" }}>
                     <button
+                      onClick={() => {
+                        setSelectedForManual(book);
+                        setManualModalOpen(true);
+                      }}
+                      className="btn btn-sm btn-primary"
+                      title="Subsanar este libro e introducir sus metadatos manualmente"
+                    >
+                      <Edit3 size={14} />
+                      <span>Introducir Manualmente</span>
+                    </button>
+
+                    <button
                       onClick={() => handleRevealFinder(book.id)}
                       className="btn btn-sm btn-secondary"
                       title="Mostrar este archivo en Finder de macOS"
@@ -513,6 +540,23 @@ export function ErrorsView({ onSelectBook, onNavigate }: ErrorsViewProps) {
           })}
         </div>
       )}
+
+      {/* Manual Book Entry / Resolution Modal */}
+      <ManualBookModal
+        isOpen={manualModalOpen}
+        initialBook={selectedForManual}
+        onClose={() => {
+          setManualModalOpen(false);
+          setSelectedForManual(null);
+        }}
+        onSaved={(savedBook) => {
+          loadErrors();
+          if (onRefreshStats) onRefreshStats();
+          setActionStatus(`¡Libro "${savedBook.title}" guardado con éxito! Se ha incorporado al catálogo bibliográfico.`);
+          setTimeout(() => setActionStatus(null), 5000);
+        }}
+        availableCategories={availableCategories}
+      />
     </div>
   );
 }

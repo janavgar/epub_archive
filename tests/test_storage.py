@@ -60,3 +60,65 @@ def test_storage_save_list_and_stats(tmp_path):
 
     finally:
         storage.close()
+
+
+def test_storage_save_manual_book_recovers_error_and_deletes(tmp_path):
+    storage = Storage(tmp_path)
+    try:
+        book_id = "/path/to/damaged_book.epub"
+        # Simulate a failed book entry
+        storage.save_failure(
+            book_id=book_id,
+            digest="fake_sha",
+            title="Libro Corrupto",
+            author="Desconocido",
+            error="Bad Zip file: File is not a zip file",
+        )
+
+        # Verify error status
+        errors = storage.list_books(limit=10, status="error")
+        assert len(errors) == 1
+        assert errors[0]["id"] == book_id
+        assert errors[0]["status"] == "error"
+        assert "Bad Zip" in errors[0]["error"]
+
+        # Manually recover the book
+        result = storage.save_manual_book(
+            book_id=book_id,
+            title="El Quijote de la Mancha",
+            author="Miguel de Cervantes",
+            categories=["Clásicos", "Novela de caballería"],
+            summary="Aventuras del ingenioso hidalgo Don Quijote y Sancho Panza.",
+            keywords=["hidalgo", "molinos", "caballero"],
+            year="1605",
+            language="es",
+            publisher="Francisco de Robles",
+            description="Obra cumbre de la literatura en español.",
+            content_sample="En un lugar de la Mancha, de cuyo nombre no quiero acordarme...",
+        )
+
+        assert result["title"] == "El Quijote de la Mancha"
+        assert result["author"] == "Miguel de Cervantes"
+        assert result["status"] == "done"
+        assert result["error"] is None
+        assert result["year"] == "1605"
+        assert result["chunk_count"] == 1
+        assert "Clásicos" in result["categories"]
+
+        # Now error list should be empty
+        assert len(storage.list_books(limit=10, status="error")) == 0
+
+        # And done list should have 1 book
+        done_books = storage.list_books(limit=10, status="done")
+        assert len(done_books) == 1
+        assert done_books[0]["id"] == book_id
+        assert done_books[0]["title"] == "El Quijote de la Mancha"
+
+        # Verify deletion works
+        deleted = storage.delete_book(book_id)
+        assert deleted is True
+        assert len(storage.list_books(limit=10)) == 0
+
+    finally:
+        storage.close()
+

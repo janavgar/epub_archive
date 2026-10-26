@@ -10,8 +10,10 @@ import {
   ChevronRight,
   ShieldCheck,
   BookCheck,
+  PlusCircle,
 } from "lucide-react";
 import { BookDetail } from "@/lib/db";
+import { ManualBookModal } from "./ManualBookModal";
 
 interface BooksViewProps {
   onSelectBook: (book: BookDetail) => void;
@@ -33,6 +35,7 @@ export function BooksView({ onSelectBook, onBookUpdated, initialCategory }: Book
   const pageSize = 36;
 
   const [categories, setCategories] = useState<string[]>([]);
+  const [manualModalOpen, setManualModalOpen] = useState(false);
 
   useEffect(() => {
     fetch("/api/stats")
@@ -130,24 +133,36 @@ export function BooksView({ onSelectBook, onBookUpdated, initialCategory }: Book
           </p>
         </div>
 
-        {/* View mode toggle with clear spacing */}
-        <div style={{ display: "flex", gap: "0.5rem", background: "rgba(255,255,255,0.04)", padding: "0.3rem", borderRadius: "var(--radius-md)", border: "1px solid var(--border-subtle)" }}>
+        <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
           <button
-            onClick={() => setViewMode("grid")}
-            className={`btn btn-sm ${viewMode === "grid" ? "btn-primary" : "btn-secondary"}`}
-            title="Vista en cuadrícula"
+            onClick={() => setManualModalOpen(true)}
+            className="btn btn-primary"
+            style={{ fontSize: "0.86rem" }}
+            title="Añadir libro manualmente al catálogo"
           >
-            <Grid3X3 size={16} />
-            <span>Cuadrícula</span>
+            <PlusCircle size={15} />
+            <span>+ Añadir Manualmente</span>
           </button>
-          <button
-            onClick={() => setViewMode("list")}
-            className={`btn btn-sm ${viewMode === "list" ? "btn-primary" : "btn-secondary"}`}
-            title="Vista en lista"
-          >
-            <List size={16} />
-            <span>Lista</span>
-          </button>
+
+          {/* View mode toggle with clear spacing */}
+          <div style={{ display: "flex", gap: "0.5rem", background: "rgba(255,255,255,0.04)", padding: "0.3rem", borderRadius: "var(--radius-md)", border: "1px solid var(--border-subtle)" }}>
+            <button
+              onClick={() => setViewMode("grid")}
+              className={`btn btn-sm ${viewMode === "grid" ? "btn-primary" : "btn-secondary"}`}
+              title="Vista en cuadrícula"
+            >
+              <Grid3X3 size={16} />
+              <span>Cuadrícula</span>
+            </button>
+            <button
+              onClick={() => setViewMode("list")}
+              className={`btn btn-sm ${viewMode === "list" ? "btn-primary" : "btn-secondary"}`}
+              title="Vista en lista"
+            >
+              <List size={16} />
+              <span>Lista</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -482,6 +497,16 @@ export function BooksView({ onSelectBook, onBookUpdated, initialCategory }: Book
           </div>
         </div>
       )}
+      {/* Manual Book Modal */}
+      <ManualBookModal
+        isOpen={manualModalOpen}
+        onClose={() => setManualModalOpen(false)}
+        onSaved={(newBook) => {
+          loadBooks();
+          if (onBookUpdated) onBookUpdated(newBook);
+        }}
+        availableCategories={categories}
+      />
     </div>
   );
 }

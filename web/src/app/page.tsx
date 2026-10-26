@@ -9,6 +9,7 @@ import { ClusteringView } from "@/components/ClusteringView";
 import { ProcessView } from "@/components/ProcessView";
 import { ErrorsView } from "@/components/ErrorsView";
 import { BookDetailModal } from "@/components/BookDetailModal";
+import { ManualBookModal } from "@/components/ManualBookModal";
 import { BookDetail } from "@/lib/db";
 
 export default function Home() {
@@ -17,6 +18,8 @@ export default function Home() {
   const [loadingStats, setLoadingStats] = useState(true);
   const [selectedBook, setSelectedBook] = useState<BookDetail | null>(null);
   const [filterCategory, setFilterCategory] = useState<string>("");
+  const [manualModalOpen, setManualModalOpen] = useState(false);
+  const [manualBook, setManualBook] = useState<BookDetail | null>(null);
 
   const refreshStats = async () => {
     try {
@@ -39,6 +42,8 @@ export default function Home() {
     setFilterCategory(cat);
     setCurrentTab("books");
   };
+
+  const availableCategories = stats?.topCategories?.map((c: any) => c.name) || [];
 
   return (
     <div className="app-wrapper">
@@ -83,6 +88,7 @@ export default function Home() {
               setCurrentTab(tab);
             }}
             onRefreshStats={refreshStats}
+            availableCategories={availableCategories}
           />
         )}
 
@@ -114,6 +120,26 @@ export default function Home() {
           setSelectedBook(updated);
           refreshStats();
         }}
+        onEditManual={(book) => {
+          setSelectedBook(null);
+          setManualBook(book);
+          setManualModalOpen(true);
+        }}
+      />
+
+      {/* Global Manual Book Modal (when opened via BookDetailModal) */}
+      <ManualBookModal
+        isOpen={manualModalOpen}
+        initialBook={manualBook}
+        onClose={() => {
+          setManualModalOpen(false);
+          setManualBook(null);
+        }}
+        onSaved={(updated) => {
+          refreshStats();
+          setSelectedBook(updated);
+        }}
+        availableCategories={availableCategories}
       />
 
       {/* Footer */}

@@ -125,6 +125,26 @@ def _parser() -> argparse.ArgumentParser:
     list_parser.add_argument("--limit", type=int, default=100)
     list_parser.add_argument("--status", choices=["done", "error"], help="Filtra por estado del libro.")
 
+    # Manual Add / Correct Command
+    manual_parser = subparsers.add_parser(
+        "manual",
+        help="Introduce o subsana manualmente un libro en el catálogo (útil si falló el proceso automático).",
+    )
+    _add_runtime_options(manual_parser, defaults=False)
+    manual_parser.add_argument("book_id", help="Ruta del archivo EPUB o identificador único del libro.")
+    manual_parser.add_argument("--title", required=True, help="Título del libro.")
+    manual_parser.add_argument("--author", required=True, help="Autor del libro.")
+    manual_parser.add_argument("--categories", help="Categorías separadas por comas (ej: 'Ciencia, Ficción').")
+    manual_parser.add_argument("--summary", default="", help="Resumen o síntesis ejecutiva del libro.")
+    manual_parser.add_argument("--keywords", help="Palabras clave separadas por comas.")
+    manual_parser.add_argument("--year", default="", help="Año de publicación.")
+    manual_parser.add_argument("--language", default="es", help="Idioma (predeterminado: 'es').")
+    manual_parser.add_argument("--publisher", default="", help="Editorial.")
+    manual_parser.add_argument("--description", default="", help="Sinopsis o descripción del libro.")
+    manual_parser.add_argument("--original-title", default="", help="Título original.")
+    manual_parser.add_argument("--original-author", default="", help="Autor original.")
+    manual_parser.add_argument("--content", default="", help="Fragmento o texto representativo del libro.")
+
     return parser
 
 
@@ -250,6 +270,37 @@ def main() -> None:
                 if book.get("error"):
                     print(f"  Error registrado: {book['error']}")
                 print()
+
+        elif args.command == "manual":
+            cats = [c.strip() for c in args.categories.split(",") if c.strip()] if getattr(args, "categories", None) else []
+            keys = [k.strip() for k in args.keywords.split(",") if k.strip()] if getattr(args, "keywords", None) else []
+
+            book = storage.save_manual_book(
+                book_id=args.book_id,
+                title=args.title,
+                author=args.author,
+                categories=cats,
+                summary=getattr(args, "summary", "") or "",
+                keywords=keys,
+                year=getattr(args, "year", "") or "",
+                language=getattr(args, "language", "es") or "es",
+                publisher=getattr(args, "publisher", "") or "",
+                description=getattr(args, "description", "") or "",
+                original_title=getattr(args, "original_title", "") or "",
+                original_author=getattr(args, "original_author", "") or "",
+                content_sample=getattr(args, "content", "") or "",
+                ai=ai,
+            )
+            print(f"\nLibro introducido/subsanado manualmente con éxito:")
+            print(f"  • ID/Ruta   : {book['id']}")
+            print(f"  • Título    : {book['title']}")
+            print(f"  • Autor     : {book['author']}")
+            if book.get("year"):
+                print(f"  • Año       : {book['year']}")
+            if book.get("categories"):
+                print(f"  • Categorías: {', '.join(book['categories'])}")
+            print(f"  • Estado    : {book['status']}")
+            print()
 
     except (ValueError, RuntimeError) as exc:
         parser.exit(1, f"Error: {exc}\n")

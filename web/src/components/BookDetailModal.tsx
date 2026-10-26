@@ -11,6 +11,7 @@ import {
   Download,
   FolderOpen,
   BookCheck,
+  Edit3,
 } from "lucide-react";
 import { BookDetail } from "@/lib/db";
 
@@ -18,9 +19,10 @@ interface BookDetailModalProps {
   book: BookDetail | null;
   onClose: () => void;
   onToggleRead?: (book: BookDetail) => void;
+  onEditManual?: (book: BookDetail) => void;
 }
 
-export function BookDetailModal({ book, onClose, onToggleRead }: BookDetailModalProps) {
+export function BookDetailModal({ book, onClose, onToggleRead, onEditManual }: BookDetailModalProps) {
   const [fullDetail, setFullDetail] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<"summary" | "chunks" | "metadata">("summary");
@@ -480,6 +482,21 @@ export function BookDetailModal({ book, onClose, onToggleRead }: BookDetailModal
               <Download size={15} />
               <span>Descargar</span>
             </a>
+            {onEditManual && (
+              <button
+                onClick={() => onEditManual(fullDetail || book)}
+                className="btn btn-secondary btn-sm"
+                style={{
+                  padding: "0.6rem 1.1rem",
+                  borderColor: (fullDetail || book).status === "error" ? "rgba(244, 63, 94, 0.45)" : undefined,
+                  color: (fullDetail || book).status === "error" ? "#fda4af" : undefined,
+                }}
+                title="Editar o introducir metadatos manualmente"
+              >
+                <Edit3 size={15} />
+                <span>{(fullDetail || book).status === "error" ? "Subsanar Manualmente" : "Editar Metadatos"}</span>
+              </button>
+            )}
             <button
               onClick={handleToggleRead}
               disabled={updatingRead}

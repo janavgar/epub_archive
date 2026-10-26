@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import json
+import logging
 import sqlite3
 from collections import Counter
 from datetime import datetime, timezone
@@ -8,6 +10,8 @@ from pathlib import Path
 from typing import Any
 
 import chromadb
+
+logger = logging.getLogger(__name__)
 
 
 class Storage:
@@ -211,6 +215,180 @@ class Storage:
         stale_ids = [item_id for item_id in stale["ids"] if item_id not in vector_ids]
         if stale_ids:
             self.collection.delete(ids=stale_ids)
+
+    def save_manual_book(
+        self,
+        book_id: str,
+        title: str,
+        author: str,
+        categories: list[str] | None = None,
+        summary: str = "",
+        keywords: list[str] | None = None,
+        year: str = "",
+        language: str = "es",
+        publisher: str = "",
+        description: str = "",
+        original_title: str = "",
+        original_author: str = "",
+        content_sample: str = "",
+        chapter_title: str = "Contenido Manual",
+        ai: Any | None = None,
+    ) -> dict[str, Any]:
+        """Introduce o corrige manualmente un libro en el archivo, marcándolo como 'done' y limpiando cualquier error previo."""
+        categories = categories or []
+        keywords = keywords or []
+        orig_title = original_title.strip() if original_title else title.strip()
+        orig_author = original_author.strip() if original_author else author.strip()
+
+        # Calcular o reutilizar sha256
+        p = Path(book_id)
+        digest = ""
+        if p.is_file():
+            hasher = hashlib.sha256()
+            with p.open("rb") as f:
+                for block in iter(lambda: f.read(1024 * 1024), b""):
+                    hasher.update(block)
+            digest = hasher.hexdigest()
+        else:
+            row = self.db.execute("SELECT sha256 FROM books WHERE id = ?", (book_id,)).fetchone()
+            if row and row["sha256"]:
+                digest = row["sha256"]
+            else:
+                digest = hashlib.sha256(book_id.encode("utf-8")).hexdigest()
+
+        # Opcional: fragmento de texto manual
+        chunks: list[dict[str, Any]] = []
+        embeddings: list[list[float]] = []
+
+        if content_sample and content_sample.strip():
+            chunk_content = content_sample.strip()
+            chunk_id = hashlib.sha256(f"{book_id}\0manual_chunk\0{chunk_content}".encode("utf-8")).hexdigest()
+            chunks.append({
+                "id": chunk_id,
+                "chapter": chapter_title.strip() if chapter_title else "Contenido Manual",
+                "content": chunk_content,
+                "index": 0,
+            })
+            if ai is not None:
+                try:
+                    embeddings = ai.embed([chunk_content])
+                except Exception as exc:
+                    logger.warning("No se pudieron generar embeddings vectoriales para el fragmento manual: %s", exc)
+                    embeddings = []
+
+        vector_ids = [str(c["id"]) for c in chunks]
+        if chunks and len(chunks) == len(embeddings):
+            self.collection.upsert(
+                ids=vector_ids,
+                embeddings=embeddings,
+                documents=[str(chunk["content"]) for chunk in chunks],
+                metadatas=[
+                    {
+                        "book_id": book_id,
+                        "title": title.strip(),
+                        "author": author.strip(),
+                        "chapter": str(chunk.get("chapter", "")),
+                        "year": str(year).strip(),
+                    }
+                    for chunk in chunks
+                ],
+            )
+
+        now = datetime.now(timezone.utc).isoformat()
+
+        # Si no se pasó nuevo contenido, conservar conteo de fragmentos previos si existían
+        if not chunks:
+            existing_chunks = self.db.execute("SELECT COUNT(*) FROM chunks WHERE book_id = ?", (book_id,)).fetchone()[0]
+            chunk_count = existing_chunks
+            chapter_count = 1 if existing_chunks > 0 else 0
+        else:
+            chunk_count = len(chunks)
+            chapter_count = 1
+
+        self.db.execute("BEGIN")
+        try:
+            self.db.execute(
+                """
+                INSERT INTO books (
+                    id, sha256, title, author, language, year,
+                    original_title, original_author, publisher, description,
+                    categories_json, summary, keywords_json, status, error,
+                    processed_at, chunk_count, chapter_count
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'done', NULL, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    sha256=excluded.sha256, title=excluded.title,
+                    author=excluded.author, language=excluded.language,
+                    year=excluded.year, original_title=excluded.original_title,
+                    original_author=excluded.original_author,
+                    publisher=excluded.publisher, description=excluded.description,
+                    categories_json=excluded.categories_json,
+                    summary=excluded.summary, keywords_json=excluded.keywords_json,
+                    status='done', error=NULL, processed_at=excluded.processed_at,
+                    chunk_count=excluded.chunk_count, chapter_count=excluded.chapter_count
+                """,
+                (
+                    book_id,
+                    digest,
+                    title.strip(),
+                    author.strip(),
+                    language.strip() or "es",
+                    str(year).strip(),
+                    orig_title,
+                    orig_author,
+                    publisher.strip(),
+                    description.strip(),
+                    json.dumps(categories, ensure_ascii=False),
+                    summary.strip(),
+                    json.dumps(keywords, ensure_ascii=False),
+                    now,
+                    chunk_count,
+                    chapter_count,
+                ),
+            )
+            if chunks:
+                self.db.execute("DELETE FROM chunks WHERE book_id = ?", (book_id,))
+                self.db.executemany(
+                    """
+                    INSERT INTO chunks (id, book_id, chapter, content, vector_id, chunk_index)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    [
+                        (
+                            str(c["id"]),
+                            book_id,
+                            str(c.get("chapter", "")),
+                            str(c["content"]),
+                            str(c["id"]),
+                            c.get("index", 0),
+                        )
+                        for c in chunks
+                    ],
+                )
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
+
+        row = self.db.execute("SELECT * FROM books WHERE id = ?", (book_id,)).fetchone()
+        return {
+            **dict(row),
+            "categories": json.loads(row["categories_json"]),
+            "keywords": json.loads(row["keywords_json"]),
+        }
+
+    def delete_book(self, book_id: str) -> bool:
+        """Elimina un libro de SQLite, sus fragmentos asociados y sus vectores en ChromaDB."""
+        row = self.db.execute("SELECT id FROM books WHERE id = ?", (book_id,)).fetchone()
+        if not row:
+            return False
+        self.db.execute("DELETE FROM chunks WHERE book_id = ?", (book_id,))
+        self.db.execute("DELETE FROM books WHERE id = ?", (book_id,))
+        self.db.commit()
+        try:
+            self.collection.delete(where={"book_id": book_id})
+        except Exception:
+            pass
+        return True
 
     def search(
         self,
