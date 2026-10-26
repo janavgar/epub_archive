@@ -79,12 +79,26 @@ export function Navbar({ currentTab, onSelectTab, totalBooks, errorBooks, duplic
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Centrar la pestaña activa en móviles al cambiar de pestaña
+  // Centrar la pestaña activa en el contenedor con scroll en pantallas estrechas sin desplazar la ventana
   useEffect(() => {
-    if (!tabsScrollRef.current) return;
-    const activeBtn = tabsScrollRef.current.querySelector(".nav-tab-btn.active") as HTMLElement | null;
-    if (activeBtn) {
-      activeBtn.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+    const container = tabsScrollRef.current;
+    if (!container) return;
+
+    if (container.scrollWidth > container.clientWidth) {
+      const activeBtn = container.querySelector(".nav-tab-btn.active") as HTMLElement | null;
+      if (activeBtn) {
+        const targetScrollLeft =
+          activeBtn.offsetLeft - (container.clientWidth - activeBtn.clientWidth) / 2;
+        container.scrollTo({
+          left: Math.max(0, targetScrollLeft),
+          behavior: "smooth",
+        });
+      }
+    }
+
+    // Asegurar que la ventana nunca quede desplazada horizontalmente
+    if (typeof window !== "undefined" && window.scrollX !== 0) {
+      window.scrollTo({ left: 0 });
     }
   }, [currentTab]);
 

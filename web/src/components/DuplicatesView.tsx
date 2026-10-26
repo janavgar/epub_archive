@@ -211,41 +211,57 @@ export function DuplicatesView({ onSelectBook, onRefreshStats }: DuplicatesViewP
       </div>
 
       {/* Summary Metric Cards */}
-      <div className="dashboard-grid">
-        <div className="panel stat-card" style={{ borderLeft: "3px solid #f43f5e" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.6rem" }}>
+      <div className="stats-grid">
+        <div className="stat-card" style={{ borderLeft: "3px solid #f43f5e" }}>
+          <div className="stat-header">
             <span className="stat-label">Grupos Duplicados</span>
-            <Layers size={18} style={{ color: "#f43f5e" }} />
+            <div className="stat-icon" style={{ background: "rgba(244, 63, 94, 0.15)", color: "#f43f5e" }}>
+              <Layers size={18} />
+            </div>
           </div>
-          <div className="stat-value" style={{ color: "#fda4af" }}>{summary.totalGroups}</div>
-          <p className="stat-subtext">Colecciones de títulos repetidos</p>
+          <div>
+            <div className="stat-value" style={{ color: "#fda4af" }}>{summary.totalGroups}</div>
+            <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>Colecciones de títulos repetidos</span>
+          </div>
         </div>
 
-        <div className="panel stat-card" style={{ borderLeft: "3px solid #fb7185" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.6rem" }}>
+        <div className="stat-card" style={{ borderLeft: "3px solid #fb7185" }}>
+          <div className="stat-header">
             <span className="stat-label">Libros Implicados</span>
-            <AlertCircle size={18} style={{ color: "#fb7185" }} />
+            <div className="stat-icon" style={{ background: "rgba(251, 113, 133, 0.15)", color: "#fb7185" }}>
+              <AlertCircle size={18} />
+            </div>
           </div>
-          <div className="stat-value">{summary.totalDuplicateBooks}</div>
-          <p className="stat-subtext">Copias ocupando catálogo y disco</p>
+          <div>
+            <div className="stat-value">{summary.totalDuplicateBooks}</div>
+            <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>Copias ocupando catálogo y disco</span>
+          </div>
         </div>
 
-        <div className="panel stat-card" style={{ borderLeft: "3px solid #38bdf8" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.6rem" }}>
+        <div className="stat-card" style={{ borderLeft: "3px solid #38bdf8" }}>
+          <div className="stat-header">
             <span className="stat-label">Duplicados Exactos</span>
-            <Sparkles size={18} style={{ color: "#38bdf8" }} />
+            <div className="stat-icon" style={{ background: "rgba(56, 189, 248, 0.15)", color: "#38bdf8" }}>
+              <Sparkles size={18} />
+            </div>
           </div>
-          <div className="stat-value" style={{ color: "#7dd3fc" }}>{summary.sha256Groups}</div>
-          <p className="stat-subtext">Mismo Hash SHA-256 (ficheros 100% idénticos)</p>
+          <div>
+            <div className="stat-value" style={{ color: "#7dd3fc" }}>{summary.sha256Groups}</div>
+            <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>Mismo Hash SHA-256 (ficheros 100% idénticos)</span>
+          </div>
         </div>
 
-        <div className="panel stat-card" style={{ borderLeft: "3px solid #818cf8" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.6rem" }}>
+        <div className="stat-card" style={{ borderLeft: "3px solid #818cf8" }}>
+          <div className="stat-header">
             <span className="stat-label">Mismo Título y Autor</span>
-            <FileCheck2 size={18} style={{ color: "#818cf8" }} />
+            <div className="stat-icon" style={{ background: "rgba(129, 140, 248, 0.15)", color: "#818cf8" }}>
+              <FileCheck2 size={18} />
+            </div>
           </div>
-          <div className="stat-value" style={{ color: "#a5b4fc" }}>{summary.titleAuthorGroups}</div>
-          <p className="stat-subtext">Ediciones o archivos con nombres diferentes</p>
+          <div>
+            <div className="stat-value" style={{ color: "#a5b4fc" }}>{summary.titleAuthorGroups}</div>
+            <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>Ediciones o archivos con nombres diferentes</span>
+          </div>
         </div>
       </div>
 
@@ -415,10 +431,12 @@ export function DuplicatesView({ onSelectBook, onRefreshStats }: DuplicatesViewP
                         alignItems: "center",
                         flexWrap: "wrap",
                         gap: "1.25rem",
+                        minWidth: 0,
+                        maxWidth: "100%",
                       }}
                     >
                       {/* Left File Info */}
-                      <div style={{ flex: 1, minWidth: "280px" }}>
+                      <div style={{ flex: "1 1 320px", minWidth: 0, maxWidth: "100%" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap", marginBottom: "0.35rem" }}>
                           <span
                             style={{
@@ -428,11 +446,20 @@ export function DuplicatesView({ onSelectBook, onRefreshStats }: DuplicatesViewP
                               borderRadius: "4px",
                               background: "rgba(255, 255, 255, 0.08)",
                               color: "#fff",
+                              flexShrink: 0,
                             }}
                           >
                             Copia #{copyIdx + 1}
                           </span>
-                          <span style={{ fontWeight: 700, fontSize: "0.95rem", color: "#f8fafc" }}>
+                          <span
+                            style={{
+                              fontWeight: 700,
+                              fontSize: "0.95rem",
+                              color: "#f8fafc",
+                              wordBreak: "break-word",
+                              overflowWrap: "anywhere",
+                            }}
+                          >
                             {book.filename}
                           </span>
                           {book.file_exists ? (
@@ -443,6 +470,7 @@ export function DuplicatesView({ onSelectBook, onRefreshStats }: DuplicatesViewP
                                 background: "rgba(16, 185, 129, 0.15)",
                                 color: "#6ee7b7",
                                 borderColor: "rgba(16, 185, 129, 0.35)",
+                                flexShrink: 0,
                               }}
                             >
                               En disco ({book.file_size_formatted || "OK"})
@@ -455,6 +483,7 @@ export function DuplicatesView({ onSelectBook, onRefreshStats }: DuplicatesViewP
                                 background: "rgba(244, 63, 94, 0.15)",
                                 color: "#fda4af",
                                 borderColor: "rgba(244, 63, 94, 0.35)",
+                                flexShrink: 0,
                               }}
                             >
                               Fichero no encontrado
@@ -467,6 +496,7 @@ export function DuplicatesView({ onSelectBook, onRefreshStats }: DuplicatesViewP
                                 fontSize: "0.7rem",
                                 background: "rgba(244, 63, 94, 0.15)",
                                 color: "#fda4af",
+                                flexShrink: 0,
                               }}
                             >
                               Error en proceso
@@ -479,6 +509,7 @@ export function DuplicatesView({ onSelectBook, onRefreshStats }: DuplicatesViewP
                                 fontSize: "0.7rem",
                                 background: "rgba(16, 185, 129, 0.15)",
                                 color: "#6ee7b7",
+                                flexShrink: 0,
                               }}
                             >
                               Leído
@@ -495,15 +526,26 @@ export function DuplicatesView({ onSelectBook, onRefreshStats }: DuplicatesViewP
                             fontSize: "0.76rem",
                             fontFamily: "monospace",
                             color: "var(--text-secondary)",
-                            wordBreak: "break-all",
+                            minWidth: 0,
+                            maxWidth: "100%",
                           }}
                         >
-                          <span style={{ color: "var(--text-muted)" }}>Ruta:</span>
-                          <span>{book.id}</span>
+                          <span style={{ color: "var(--text-muted)", flexShrink: 0 }}>Ruta:</span>
+                          <span
+                            style={{
+                              wordBreak: "break-all",
+                              overflowWrap: "anywhere",
+                              minWidth: 0,
+                              flex: 1,
+                            }}
+                          >
+                            {book.id}
+                          </span>
                           <button
                             type="button"
                             onClick={() => handleCopy(book.id, book.id)}
                             style={{
+                              flexShrink: 0,
                               background: "none",
                               border: "none",
                               color: copiedId === book.id ? "#34d399" : "var(--text-muted)",
