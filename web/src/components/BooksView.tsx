@@ -13,6 +13,7 @@ import {
   PlusCircle,
   Trash2,
   Copy,
+  X,
 } from "lucide-react";
 import { BookDetail } from "@/lib/db";
 import { ManualBookModal } from "./ManualBookModal";
@@ -23,15 +24,22 @@ interface BooksViewProps {
   onBookUpdated?: (book: BookDetail) => void;
   onNavigateDuplicates?: () => void;
   initialCategory?: string;
+  initialReadFilter?: string;
 }
 
-export function BooksView({ onSelectBook, onBookUpdated, onNavigateDuplicates, initialCategory }: BooksViewProps) {
+export function BooksView({
+  onSelectBook,
+  onBookUpdated,
+  onNavigateDuplicates,
+  initialCategory,
+  initialReadFilter,
+}: BooksViewProps) {
   const [books, setBooks] = useState<BookDetail[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>(initialCategory || "");
   const [selectedStatus, setSelectedStatus] = useState<string>("");
-  const [readFilter, setReadFilter] = useState<string>("");
+  const [readFilter, setReadFilter] = useState<string>(initialReadFilter || "");
   const [updatingBookId, setUpdatingBookId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [totalCount, setTotalCount] = useState(0);
@@ -57,6 +65,20 @@ export function BooksView({ onSelectBook, onBookUpdated, onNavigateDuplicates, i
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (initialCategory !== undefined) {
+      setSelectedCategory(initialCategory);
+      setPage(1);
+    }
+  }, [initialCategory]);
+
+  useEffect(() => {
+    if (initialReadFilter !== undefined) {
+      setReadFilter(initialReadFilter);
+      setPage(1);
+    }
+  }, [initialReadFilter]);
 
   const loadBooks = async () => {
     setLoading(true);
@@ -130,16 +152,36 @@ export function BooksView({ onSelectBook, onBookUpdated, onNavigateDuplicates, i
       {/* Top Header & Search Controls */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1.5rem" }}>
         <div>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.8rem", marginBottom: "0.3rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.8rem", marginBottom: "0.3rem", flexWrap: "wrap" }}>
             <h1 style={{ fontSize: "2rem", fontWeight: 800, color: "#fff", letterSpacing: "-0.02em" }}>
               Catálogo Bibliográfico
             </h1>
             <span className="pill-tag" style={{ fontSize: "0.75rem" }}>
               {totalCount} libros
             </span>
+            {readFilter === "read" && (
+              <span
+                className="pill-tag"
+                style={{
+                  fontSize: "0.75rem",
+                  background: "rgba(16, 185, 129, 0.2)",
+                  color: "#34d399",
+                  borderColor: "rgba(16, 185, 129, 0.4)",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.3rem",
+                  fontWeight: 600,
+                }}
+              >
+                <BookCheck size={12} />
+                <span>Solo Leídos</span>
+              </span>
+            )}
           </div>
           <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>
-            Explora metadatos validados, fragmentos vectorizados y resúmenes ejecutivos
+            {readFilter === "read"
+              ? "Mostrando los libros que tienen el marcador de 'Leído'"
+              : "Explora metadatos validados, fragmentos vectorizados y resúmenes ejecutivos"}
           </p>
         </div>
 
@@ -255,12 +297,41 @@ export function BooksView({ onSelectBook, onBookUpdated, onNavigateDuplicates, i
               setPage(1);
             }}
             className="form-select"
+            style={
+              readFilter === "read"
+                ? {
+                    borderColor: "rgba(16, 185, 129, 0.6)",
+                    background: "rgba(16, 185, 129, 0.12)",
+                    color: "#a7f3d0",
+                    fontWeight: 600,
+                  }
+                : undefined
+            }
           >
             <option value="">Lectura: Todos</option>
             <option value="read">Solo Leídos (✓)</option>
             <option value="unread">Solo Pendientes</option>
           </select>
         </div>
+
+        {/* Clear filters button */}
+        {(Boolean(search) || Boolean(selectedCategory) || Boolean(selectedStatus) || Boolean(readFilter)) && (
+          <button
+            onClick={() => {
+              setSearch("");
+              setSelectedCategory("");
+              setSelectedStatus("");
+              setReadFilter("");
+              setPage(1);
+            }}
+            className="btn btn-sm btn-secondary"
+            style={{ fontSize: "0.82rem", display: "inline-flex", alignItems: "center", gap: "0.35rem", padding: "0.55rem 0.85rem" }}
+            title="Restablecer todos los filtros"
+          >
+            <X size={14} />
+            <span>Restablecer filtros</span>
+          </button>
+        )}
       </div>
 
       {/* Books Content */}
@@ -271,9 +342,13 @@ export function BooksView({ onSelectBook, onBookUpdated, onNavigateDuplicates, i
       ) : books.length === 0 ? (
         <div className="panel" style={{ textAlign: "center", padding: "4rem 2rem" }}>
           <BookOpen size={36} color="var(--accent-primary)" style={{ margin: "0 auto 1rem" }} />
-          <h3 style={{ fontSize: "1.2rem", fontWeight: 700, color: "#fff", marginBottom: "0.5rem" }}>No se encontraron libros</h3>
-          <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", maxWidth: "420px", margin: "0 auto" }}>
-            Prueba a modificar los filtros o el texto de búsqueda para encontrar lo que buscas.
+          <h3 style={{ fontSize: "1.2rem", fontWeight: 700, color: "#fff", marginBottom: "0.5rem" }}>
+            {readFilter === "read" ? "No se encontraron libros leídos" : "No se encontraron libros"}
+          </h3>
+          <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", maxWidth: "440px", margin: "0 auto" }}>
+            {readFilter === "read"
+              ? "Actualmente no hay libros que coincidan con el filtro de 'Leído'. Puedes marcar libros como leídos usando el botón 'Leído' en cada ficha de libro."
+              : "Prueba a modificar los filtros o el texto de búsqueda para encontrar lo que buscas."}
           </p>
         </div>
       ) : viewMode === "grid" ? (

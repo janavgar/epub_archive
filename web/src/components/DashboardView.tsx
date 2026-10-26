@@ -31,10 +31,15 @@ interface DashboardStats {
   recentBooks: BookDetail[];
 }
 
+export interface DashboardNavigateOptions {
+  category?: string;
+  readFilter?: "read" | "unread" | "";
+}
+
 interface DashboardViewProps {
   stats: DashboardStats | null;
   loading: boolean;
-  onNavigate: (tab: NavTab) => void;
+  onNavigate: (tab: NavTab, options?: DashboardNavigateOptions) => void;
   onSelectBook: (book: BookDetail) => void;
 }
 
@@ -90,7 +95,12 @@ export function DashboardView({
       {/* 5 Stat Metric Cards */}
       <div className="stats-grid">
         {/* Card 1: Total Books */}
-        <div className="stat-card">
+        <div
+          className="stat-card"
+          onClick={() => onNavigate("books")}
+          style={{ cursor: "pointer" }}
+          title="Ver todo el catálogo de libros"
+        >
           <div className="stat-header">
             <span className="stat-label">Libros en Archivo</span>
             <div className="stat-icon" style={{ background: "rgba(99, 102, 241, 0.15)", color: "#818cf8" }}>
@@ -133,9 +143,9 @@ export function DashboardView({
         {/* Card 2: Libros Leídos */}
         <div
           className="stat-card"
-          onClick={() => onNavigate("books")}
-          style={{ cursor: "pointer" }}
-          title="Ver biblioteca"
+          onClick={() => onNavigate("books", { readFilter: "read" })}
+          style={{ cursor: "pointer", borderLeft: "3px solid #10b981" }}
+          title="Ver libros marcados como leídos"
         >
           <div className="stat-header">
             <span className="stat-label">Libros Leídos</span>
@@ -149,9 +159,12 @@ export function DashboardView({
               {readPercentage}% de tu biblioteca
             </span>
           </div>
-          <div className="stat-footer" style={{ display: "flex", alignItems: "center", gap: "0.4rem", color: "var(--accent-emerald)" }}>
-            <BookCheck size={13} />
-            <span>Progreso de lectura</span>
+          <div className="stat-footer" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", color: "var(--accent-emerald)" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+              <BookCheck size={13} />
+              <span>Ver {readCount} {readCount === 1 ? "libro leído" : "libros leídos"}</span>
+            </span>
+            <ArrowRight size={13} />
           </div>
         </div>
 
@@ -252,7 +265,12 @@ export function DashboardView({
             {stats.topCategories.slice(0, 8).map((cat) => {
               const percent = Math.round((cat.count / maxCategoryCount) * 100);
               return (
-                <div key={cat.name} style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                <div
+                  key={cat.name}
+                  onClick={() => onNavigate("books", { category: cat.name })}
+                  style={{ display: "flex", flexDirection: "column", gap: "0.4rem", cursor: "pointer" }}
+                  title={`Ver libros de ${cat.name}`}
+                >
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem" }}>
                     <span style={{ fontWeight: 600, color: "var(--text-main)" }}>{cat.name}</span>
                     <span style={{ color: "var(--text-secondary)", fontWeight: 700 }}>{cat.count} libros</span>

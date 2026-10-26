@@ -19,6 +19,7 @@ export default function Home() {
   const [loadingStats, setLoadingStats] = useState(true);
   const [selectedBook, setSelectedBook] = useState<BookDetail | null>(null);
   const [filterCategory, setFilterCategory] = useState<string>("");
+  const [filterRead, setFilterRead] = useState<string>("");
   const [manualModalOpen, setManualModalOpen] = useState(false);
   const [manualBook, setManualBook] = useState<BookDetail | null>(null);
 
@@ -41,6 +42,7 @@ export default function Home() {
 
   const handleSelectCategory = (cat: string) => {
     setFilterCategory(cat);
+    setFilterRead("");
     setCurrentTab("books");
   };
 
@@ -53,6 +55,7 @@ export default function Home() {
         currentTab={currentTab}
         onSelectTab={(tab) => {
           setFilterCategory("");
+          setFilterRead("");
           setCurrentTab(tab);
         }}
         totalBooks={stats?.totalBooks}
@@ -66,8 +69,9 @@ export default function Home() {
           <DashboardView
             stats={stats}
             loading={loadingStats}
-            onNavigate={(tab) => {
-              setFilterCategory("");
+            onNavigate={(tab, options) => {
+              setFilterCategory(options?.category || "");
+              setFilterRead(options?.readFilter || "");
               setCurrentTab(tab);
             }}
             onSelectBook={setSelectedBook}
@@ -80,9 +84,11 @@ export default function Home() {
             onBookUpdated={() => refreshStats()}
             onNavigateDuplicates={() => {
               setFilterCategory("");
+              setFilterRead("");
               setCurrentTab("duplicates");
             }}
             initialCategory={filterCategory}
+            initialReadFilter={filterRead}
           />
         )}
 
@@ -98,6 +104,7 @@ export default function Home() {
             onSelectBook={setSelectedBook}
             onNavigate={(tab) => {
               setFilterCategory("");
+              setFilterRead("");
               setCurrentTab(tab);
             }}
             onRefreshStats={refreshStats}
