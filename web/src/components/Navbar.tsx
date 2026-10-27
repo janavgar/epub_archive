@@ -14,7 +14,9 @@ import {
   ChevronRight,
   Cpu,
   Copy,
+  Terminal,
 } from "lucide-react";
+import { useProcess } from "./ProcessContext";
 
 export type NavTab = "dashboard" | "books" | "duplicates" | "errors" | "search" | "cluster" | "process";
 
@@ -36,6 +38,7 @@ interface NavItem {
 }
 
 export function Navbar({ currentTab, onSelectTab, totalBooks, errorBooks, duplicateGroups }: NavbarProps) {
+  const { isRunning, isStopping, progress, toggleLogDrawer } = useProcess();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [modelStatus, setModelStatus] = useState<{
     online: boolean;
@@ -175,8 +178,31 @@ export function Navbar({ currentTab, onSelectTab, totalBooks, errorBooks, duplic
             </div>
           </div>
 
-          {/* Right actions: Server status + Mobile toggle button */}
+          {/* Right actions: Process indicator + Server status + Mobile toggle button */}
           <div className="navbar-actions">
+            {/* Visual Process Status Indicator Pill */}
+            {(isRunning || isStopping) && (
+              <button
+                type="button"
+                onClick={toggleLogDrawer}
+                className={`navbar-process-pill ${isStopping ? "stopping" : "running"}`}
+                title="Haga clic para ver el log en tiempo real o detener el proceso"
+              >
+                <span className={`status-dot ${isStopping ? "stopping" : "online"}`} />
+                <span className="navbar-process-text">
+                  {isStopping
+                    ? "Deteniendo..."
+                    : progress
+                    ? `Indexando (${progress.percent.toFixed(0)}%)`
+                    : "Indexando..."}
+                </span>
+                <span className="navbar-process-text-mobile">
+                  {isStopping ? "Detener" : progress ? `${progress.percent.toFixed(0)}%` : "Indexando"}
+                </span>
+                <span className="navbar-process-btn-badge">Ver Log</span>
+              </button>
+            )}
+
             {/* LM Studio Endpoint Status */}
             <div
               className="server-status-pill"
@@ -215,23 +241,31 @@ export function Navbar({ currentTab, onSelectTab, totalBooks, errorBooks, duplic
             {navItems.map((item) => {
               const Icon = item.icon;
               const active = currentTab === item.id;
+              const isProcessTab = item.id === "process";
+              const isProcessActive = isProcessTab && (isRunning || isStopping);
+
               return (
                 <button
                   key={item.id}
                   onClick={() => handleSelect(item.id)}
-                  className={`nav-tab-btn ${active ? "active" : ""}`}
+                  className={`nav-tab-btn ${active ? "active" : ""} ${isProcessActive ? "process-running" : ""}`}
                   style={item.isAlert && item.count && item.count > 0 ? { borderColor: active ? undefined : "rgba(244, 63, 94, 0.25)" } : undefined}
                 >
                   <Icon size={16} style={item.isAlert && item.count && item.count > 0 ? { color: "#fb7185" } : undefined} />
                   <span>{item.label}</span>
-                  {item.count !== undefined && item.count > 0 && (
+                  {isProcessActive ? (
+                    <span className="nav-tab-badge process-badge">
+                      <span className="process-mini-spinner" />
+                      {progress ? `${progress.percent.toFixed(0)}%` : "Activo"}
+                    </span>
+                  ) : item.count !== undefined && item.count > 0 ? (
                     <span
                       className="nav-tab-badge"
                       style={item.isAlert ? { background: "rgba(244, 63, 94, 0.2)", color: "#fda4af", border: "1px solid rgba(244, 63, 94, 0.35)" } : undefined}
                     >
                       {item.count}
                     </span>
-                  )}
+                  ) : null}
                 </button>
               );
             })}
@@ -280,14 +314,19 @@ export function Navbar({ currentTab, onSelectTab, totalBooks, errorBooks, duplic
                       <div className="mobile-drawer-btn-text">
                         <div className="mobile-drawer-btn-title">
                           <span>{item.label}</span>
-                          {item.count !== undefined && item.count > 0 && (
+                          {item.id === "process" && (isRunning || isStopping) ? (
+                            <span className="nav-tab-badge process-badge">
+                              <span className="process-mini-spinner" />
+                              {progress ? `${progress.percent.toFixed(0)}%` : "Activo"}
+                            </span>
+                          ) : item.count !== undefined && item.count > 0 ? (
                             <span
                               className="nav-tab-badge"
                               style={item.isAlert ? { background: "rgba(244, 63, 94, 0.2)", color: "#fda4af", border: "1px solid rgba(244, 63, 94, 0.35)" } : undefined}
                             >
                               {item.count}
                             </span>
-                          )}
+                          ) : null}
                         </div>
                         <p className="mobile-drawer-btn-desc">{item.description}</p>
                       </div>

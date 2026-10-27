@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import sqlite3
 from collections import Counter
 from datetime import datetime, timezone
@@ -17,6 +18,8 @@ logger = logging.getLogger(__name__)
 class Storage:
     def __init__(self, data_dir: Path) -> None:
         data_dir.mkdir(parents=True, exist_ok=True)
+        self.data_dir = data_dir
+        self.compact_chroma_files()
         self.db_path = data_dir / "archive.sqlite3"
         self.db = sqlite3.connect(self.db_path)
         self.db.row_factory = sqlite3.Row
@@ -27,6 +30,40 @@ class Storage:
         self.collection = client.get_or_create_collection(
             name="epub_chunks", metadata={"hnsw:space": "cosine"}
         )
+
+    def compact_chroma_files(self) -> None:
+        """Compact bloated binary index files created by hnswlib/Chroma on APFS.
+
+        On macOS APFS, frequent HNSW resize operations cause sparse-allocation drift
+        in link_lists.bin (allocating tens/hundreds of GBs of empty disk blocks).
+        Rewriting the file atomically reclaims the leaked blocks immediately.
+        """
+        chroma_dir = self.data_dir / "chroma"
+        if not chroma_dir.exists():
+            return
+        for root, _, files in os.walk(chroma_dir):
+            for f in files:
+                if f.endswith(".bin"):
+                    p = Path(root) / f
+                    try:
+                        st = p.stat()
+                        allocated = st.st_blocks * 512
+                        # If allocated disk space exceeds 2x apparent size and is > 20MB
+                        if allocated > 20 * 1024 * 1024 and allocated > st.st_size * 2:
+                            tmp = p.with_suffix(".compact.tmp")
+                            with open(p, "rb") as f_in, open(tmp, "wb") as f_out:
+                                while chunk := f_in.read(8 * 1024 * 1024):
+                                    f_out.write(chunk)
+                                f_out.flush()
+                                os.fsync(f_out.fileno())
+                            tmp.replace(p)
+                            logger.info(
+                                "Compacted %s: reclaimed %.2f MB of leaked APFS space",
+                                f,
+                                (allocated - p.stat().st_blocks * 512) / (1024 * 1024),
+                            )
+                    except Exception as e:
+                        logger.warning("Could not check/compact %s: %s", p, e)
 
     def _init_schema(self) -> None:
         self.db.executescript(

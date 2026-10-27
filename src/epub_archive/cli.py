@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import signal
 import sys
 from pathlib import Path
 
@@ -10,6 +11,8 @@ from epub_archive.ai import LocalAIClient
 from epub_archive.clustering import cluster_archive
 from epub_archive.pipeline import process_directory, search
 from epub_archive.storage import Storage
+
+logger = logging.getLogger("epub_archive")
 
 
 def _add_runtime_options(parser: argparse.ArgumentParser, defaults: bool) -> None:
@@ -171,6 +174,14 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    def _sig_handler(signum, frame):
+        raise KeyboardInterrupt
+
+    try:
+        signal.signal(signal.SIGTERM, _sig_handler)
+    except (ValueError, AttributeError):
+        pass
+
     logging.basicConfig(
         level=logging.INFO, format="%(levelname)s: %(message)s", stream=sys.stderr
     )
@@ -355,6 +366,9 @@ def main() -> None:
                     print(f"    • [{b['status']}] {b['id']} ({exists_str})")
                 print()
 
+    except KeyboardInterrupt:
+        logger.info("Proceso detenido por el usuario.")
+        sys.exit(130)
     except (ValueError, RuntimeError) as exc:
         parser.exit(1, f"Error: {exc}\n")
     finally:

@@ -204,6 +204,7 @@ def process_directory(
         "Finalizado lote de %d libros en %.1fs: %d procesados, %d omitidos, %d fallidos.",
         total_count, total_elapsed, processed, skipped, failed
     )
+    storage.compact_chroma_files()
     return processed, skipped, failed
 
 
