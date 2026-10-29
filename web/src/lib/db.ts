@@ -11,6 +11,42 @@ let dbInstance: DatabaseSync | null = null;
 
 export function ensureSchema(db: DatabaseSync): void {
   try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS books (
+        id TEXT PRIMARY KEY,
+        sha256 TEXT NOT NULL,
+        title TEXT NOT NULL,
+        author TEXT NOT NULL,
+        language TEXT NOT NULL,
+        year TEXT NOT NULL DEFAULT '',
+        original_title TEXT NOT NULL DEFAULT '',
+        original_author TEXT NOT NULL DEFAULT '',
+        publisher TEXT NOT NULL DEFAULT '',
+        description TEXT NOT NULL DEFAULT '',
+        categories_json TEXT NOT NULL DEFAULT '[]',
+        summary TEXT NOT NULL DEFAULT '',
+        keywords_json TEXT NOT NULL DEFAULT '[]',
+        status TEXT NOT NULL,
+        error TEXT,
+        processed_at TEXT,
+        chunk_count INTEGER NOT NULL DEFAULT 0,
+        chapter_count INTEGER NOT NULL DEFAULT 0,
+        cluster_id INTEGER DEFAULT -1,
+        cluster_label TEXT DEFAULT '',
+        is_read INTEGER NOT NULL DEFAULT 0,
+        read_at TEXT DEFAULT NULL
+      );
+      CREATE TABLE IF NOT EXISTS chunks (
+        id TEXT PRIMARY KEY,
+        book_id TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+        chapter TEXT NOT NULL,
+        content TEXT NOT NULL,
+        vector_id TEXT NOT NULL,
+        chunk_index INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX IF NOT EXISTS chunks_book_id ON chunks(book_id);
+      CREATE INDEX IF NOT EXISTS books_cluster ON books(cluster_id);
+    `);
     const cols = (db.prepare("PRAGMA table_info(books)").all() as any[]).map((r) => r.name);
     if (!cols.includes("is_read")) {
       db.exec("ALTER TABLE books ADD COLUMN is_read INTEGER NOT NULL DEFAULT 0");

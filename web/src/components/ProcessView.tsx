@@ -14,6 +14,8 @@ import {
   Trash2,
   ArrowDownCircle,
   AlertTriangle,
+  Cpu,
+  Settings,
 } from "lucide-react";
 import { useProcess } from "./ProcessContext";
 
@@ -43,6 +45,37 @@ export function ProcessView({ onProcessComplete }: ProcessViewProps) {
   const [confirmStop, setConfirmStop] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [autoScroll, setAutoScroll] = useState(true);
+  const [aiInfo, setAiInfo] = useState<{
+    online: boolean;
+    providerName: string;
+    baseUrl: string;
+    chatModel: string | null;
+    embeddingModel: string | null;
+    separateEmbedding: boolean;
+    embeddingProvider: string;
+  } | null>(null);
+
+  const fetchAiInfo = async () => {
+    try {
+      const res = await fetch("/api/models");
+      const data = await res.json();
+      setAiInfo({
+        online: Boolean(data.online),
+        providerName: data.providerName || "LM Studio",
+        baseUrl: data.baseUrl || "http://localhost:1234/v1",
+        chatModel: data.recommendedChatModel || null,
+        embeddingModel: data.recommendedEmbeddingModel || null,
+        separateEmbedding: Boolean(data.config?.separate_embedding),
+        embeddingProvider: data.config?.embedding_provider || data.provider || "lm_studio",
+      });
+    } catch {}
+  };
+
+  useEffect(() => {
+    fetchAiInfo();
+    window.addEventListener("ai-config-updated", fetchAiInfo);
+    return () => window.removeEventListener("ai-config-updated", fetchAiInfo);
+  }, []);
 
   const logsEndRef = useRef<HTMLDivElement>(null);
   const terminalBodyRef = useRef<HTMLDivElement>(null);
@@ -162,6 +195,73 @@ export function ProcessView({ onProcessComplete }: ProcessViewProps) {
               <span>Deteniendo proceso...</span>
             </span>
           )}
+        </div>
+
+        {/* Active AI Backend Summary Banner */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: "1rem",
+            padding: "1rem 1.25rem",
+            borderRadius: "12px",
+            background: "rgba(99, 102, 241, 0.07)",
+            border: "1px solid rgba(99, 102, 241, 0.25)",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "0.85rem", flexWrap: "wrap" }}>
+            <div
+              style={{
+                width: "36px",
+                height: "36px",
+                borderRadius: "10px",
+                background: "rgba(99, 102, 241, 0.18)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "var(--accent-primary)",
+              }}
+            >
+              <Cpu size={18} />
+            </div>
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+                <span style={{ fontSize: "0.9rem", fontWeight: 700, color: "#fff" }}>
+                  Backend de IA: {aiInfo?.providerName || "LM Studio"}
+                </span>
+                <span
+                  className="pill-tag"
+                  style={{
+                    fontSize: "0.7rem",
+                    padding: "0.1rem 0.5rem",
+                    background: aiInfo?.online
+                      ? "rgba(16, 185, 129, 0.18)"
+                      : "rgba(244, 63, 94, 0.18)",
+                    color: aiInfo?.online ? "#6ee7b7" : "#fda4af",
+                  }}
+                >
+                  {aiInfo?.online ? "Conectado" : "Desconectado"}
+                </span>
+              </div>
+              <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)", marginTop: "0.15rem" }}>
+                Chat: <code>{aiInfo?.chatModel || "Automático"}</code> • Embeddings:{" "}
+                <code>{aiInfo?.embeddingModel || "Automático"}</code> ({aiInfo?.baseUrl || "localhost:1234"})
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new Event("open-ai-settings"))}
+            disabled={isRunning || isStopping}
+            className="btn btn-secondary btn-sm"
+            style={{ fontSize: "0.82rem", padding: "0.45rem 0.9rem" }}
+          >
+            <Settings size={14} />
+            <span>Cambiar Backend de IA</span>
+          </button>
         </div>
 
         {/* Directory Input */}

@@ -15,8 +15,10 @@ import {
   Cpu,
   Copy,
   Terminal,
+  Settings,
 } from "lucide-react";
 import { useProcess } from "./ProcessContext";
+import { AISettingsModal } from "./AISettingsModal";
 
 export type NavTab = "dashboard" | "books" | "duplicates" | "errors" | "search" | "cluster" | "process";
 
@@ -40,12 +42,16 @@ interface NavItem {
 export function Navbar({ currentTab, onSelectTab, totalBooks, errorBooks, duplicateGroups }: NavbarProps) {
   const { isRunning, isStopping, progress, toggleLogDrawer } = useProcess();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [aiModalOpen, setAiModalOpen] = useState(false);
   const [modelStatus, setModelStatus] = useState<{
     online: boolean;
+    provider?: string;
+    providerName?: string;
+    baseUrl?: string;
     chatModel?: string | null;
     embeddingModel?: string | null;
     loading: boolean;
-  }>({ online: false, loading: true });
+  }>({ online: false, providerName: "IA", loading: true });
 
   const tabsScrollRef = useRef<HTMLDivElement>(null);
 
@@ -56,19 +62,30 @@ export function Navbar({ currentTab, onSelectTab, totalBooks, errorBooks, duplic
       const data = await res.json();
       setModelStatus({
         online: data.online,
+        provider: data.provider,
+        providerName: data.providerName || "LM Studio",
+        baseUrl: data.baseUrl,
         chatModel: data.recommendedChatModel,
         embeddingModel: data.recommendedEmbeddingModel,
         loading: false,
       });
     } catch {
-      setModelStatus({ online: false, loading: false });
+      setModelStatus((prev) => ({ ...prev, online: false, loading: false }));
     }
   };
 
   useEffect(() => {
     checkStatus();
     const interval = setInterval(checkStatus, 30000);
-    return () => clearInterval(interval);
+    const handleOpenModal = () => setAiModalOpen(true);
+    const handleConfigUpdated = () => checkStatus();
+    window.addEventListener("open-ai-settings", handleOpenModal);
+    window.addEventListener("ai-config-updated", handleConfigUpdated);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("open-ai-settings", handleOpenModal);
+      window.removeEventListener("ai-config-updated", handleConfigUpdated);
+    };
   }, []);
 
   // Cerrar menú móvil al redimensionar a pantalla grande
@@ -203,15 +220,37 @@ export function Navbar({ currentTab, onSelectTab, totalBooks, errorBooks, duplic
               </button>
             )}
 
-            {/* LM Studio Endpoint Status */}
+            {/* AI Backend Endpoint Status & Settings Trigger */}
             <div
               className="server-status-pill"
-              title={modelStatus.online ? `LM Studio Online: ${modelStatus.chatModel || 'Activo'}` : 'LM Studio Desconectado'}
+              onClick={() => setAiModalOpen(true)}
+              style={{ cursor: "pointer" }}
+              title={
+                modelStatus.online
+                  ? `${modelStatus.providerName || "IA"} Online (${modelStatus.chatModel || "Activo"}) — Clic para cambiar backend de IA`
+                  : `${modelStatus.providerName || "IA"} Desconectado — Clic para configurar backend de IA`
+              }
             >
               <span className={`status-dot ${modelStatus.online ? "online" : "offline"}`} />
-              <span className="status-text">{modelStatus.online ? "LM Studio Online" : "LM Studio Offline"}</span>
-              <span className="status-text-mobile">{modelStatus.online ? "Online" : "Offline"}</span>
+              <span className="status-text">
+                {modelStatus.providerName || "IA"} {modelStatus.online ? "Online" : "Offline"}
+              </span>
+              <span className="status-text-mobile">
+                {modelStatus.providerName || "IA"}
+              </span>
               <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setAiModalOpen(true);
+                }}
+                className="status-refresh-btn"
+                title="Cambiar o configurar proveedor de IA"
+              >
+                <Settings size={13} />
+              </button>
+              <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   checkStatus();
@@ -339,19 +378,52 @@ export function Navbar({ currentTab, onSelectTab, totalBooks, errorBooks, duplic
 
             {/* Mobile Server Info Card */}
             <div className="mobile-drawer-footer">
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.3rem" }}>
-                <Cpu size={14} color="var(--accent-cyan)" />
-                <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "#fff" }}>Estado del Pipeline Local</span>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem", marginBottom: "0.4rem" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <Cpu size={14} color="var(--accent-cyan)" />
+                  <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "#fff" }}>
+                    Backend IA: {modelStatus.providerName || "LM Studio"}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    setAiModalOpen(true);
+                  }}
+                  className="btn btn-secondary btn-sm"
+                  style={{ fontSize: "0.72rem", padding: "0.2rem 0.55rem" }}
+                >
+                  <Settings size={12} />
+                  <span>Cambiar</span>
+                </button>
               </div>
               <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)", lineHeight: 1.4 }}>
                 {modelStatus.online
-                  ? `LM Studio conectado. Modelo chat: ${modelStatus.chatModel || 'Estándar'}`
-                  : 'LM Studio no detectado en localhost:1234. Inicia LM Studio para clasificación y embeddings.'}
+                  ? `${modelStatus.providerName || "Proveedor"} conectado. Modelo chat: ${modelStatus.chatModel || "Automático"}`
+                  : `${modelStatus.providerName || "Proveedor"} no detectado en ${modelStatus.baseUrl || "el servidor"}. Pulsa Cambiar para elegir otro backend.`}
               </p>
             </div>
           </div>
         </div>
       )}
+
+      <AISettingsModal
+        isOpen={aiModalOpen}
+        onClose={() => setAiModalOpen(false)}
+        onSaved={(data) => {
+          setModelStatus({
+            online: Boolean(data.online),
+            provider: data.provider,
+            providerName: data.providerName || "IA",
+            baseUrl: data.baseUrl,
+            chatModel: data.recommendedChatModel,
+            embeddingModel: data.recommendedEmbeddingModel,
+            loading: false,
+          });
+          window.dispatchEvent(new Event("ai-config-updated"));
+        }}
+      />
     </header>
   );
 }

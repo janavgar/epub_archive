@@ -1,6 +1,7 @@
 import { spawn, ChildProcess } from "node:child_process";
 import path from "node:path";
 import fs from "node:fs";
+import { buildCliAIArgs, loadAIConfig, PROVIDER_PRESETS } from "./aiConfig";
 
 export interface ProcessProgress {
   current: number;
@@ -171,13 +172,20 @@ class ProcessManager {
     }
 
     const projectRoot = path.resolve(process.cwd(), "..");
-    const args = ["run", "epub-archive", "process", resolvedDir];
+    const aiConfig = loadAIConfig();
+    const aiArgs = buildCliAIArgs(aiConfig);
+    const args = ["run", "epub-archive", ...aiArgs, "process", resolvedDir];
 
     if (force) args.push("--force");
     if (maxBooks && maxBooks > 0) args.push("--max-books", String(maxBooks));
     if (categories) args.push("--categories", categories);
     if (overlap && overlap !== 150) args.push("--overlap", String(overlap));
     if (skipEmbeddings) args.push("--skip-embeddings");
+
+    const providerLabel = PROVIDER_PRESETS[aiConfig.provider]?.name || aiConfig.provider;
+    const embProviderLabel = aiConfig.separate_embedding
+      ? PROVIDER_PRESETS[aiConfig.embedding_provider]?.name || aiConfig.embedding_provider
+      : providerLabel;
 
     // Reset state
     this.isRunning = true;
@@ -189,9 +197,12 @@ class ProcessManager {
     this.lastError = null;
     this.progress = null;
     this.logs = [];
-    this.command = `epub-archive process ${resolvedDir}`;
+    this.command = `epub-archive --provider ${aiConfig.provider} process ${resolvedDir}`;
 
     this.addLog(`🚀 [SISTEMA] Iniciando pipeline: ${this.command}`);
+    this.addLog(
+      `🤖 [SISTEMA] Backend IA: ${providerLabel} (${aiConfig.base_url}) | Chat: ${aiConfig.chat_model || "auto"} | Embeddings: ${embProviderLabel} (${aiConfig.embedding_model || "auto"})`
+    );
     this.broadcast({ type: "status", status: this.getStatus() });
 
     try {

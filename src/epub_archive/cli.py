@@ -2,12 +2,18 @@ from __future__ import annotations
 
 import argparse
 import logging
-import os
 import signal
 import sys
 from pathlib import Path
 
-from epub_archive.ai import LocalAIClient
+from epub_archive.ai import (
+    PROVIDER_PRESETS,
+    AIConfig,
+    LocalAIClient,
+    get_config_path,
+    load_ai_config,
+    save_ai_config,
+)
 from epub_archive.clustering import cluster_archive
 from epub_archive.pipeline import process_directory, search
 from epub_archive.storage import Storage
@@ -20,44 +26,90 @@ def _add_runtime_options(parser: argparse.ArgumentParser, defaults: bool) -> Non
         "--data-dir",
         type=Path,
         default=Path(".epub_archive") if defaults else argparse.SUPPRESS,
-        help="Carpeta de SQLite y ChromaDB (predeterminada: .epub_archive).",
+        help="Carpeta de SQLite, ChromaDB y configuración (predeterminada: .epub_archive).",
+    )
+    parser.add_argument(
+        "--provider",
+        choices=list(PROVIDER_PRESETS.keys()),
+        default=None if defaults else argparse.SUPPRESS,
+        help="Proveedor de IA para chat/clasificación (lm_studio, ollama, llamacpp, vllm, openai, gemini, openrouter, custom).",
     )
     parser.add_argument(
         "--base-url",
-        default=(
-            os.getenv("LM_STUDIO_BASE_URL", "http://localhost:1234/v1")
-            if defaults
-            else argparse.SUPPRESS
-        ),
-        help="URL base del endpoint compatible con OpenAI (por defecto: http://localhost:1234/v1).",
+        default=None if defaults else argparse.SUPPRESS,
+        help="URL base del endpoint compatible con OpenAI (ej: http://localhost:1234/v1 o http://localhost:11434/v1).",
+    )
+    parser.add_argument(
+        "--api-key",
+        default=None if defaults else argparse.SUPPRESS,
+        help="Clave API opcional para el proveedor de IA.",
     )
     parser.add_argument(
         "--chat-model",
-        default=(
-            os.getenv("LM_STUDIO_CHAT_MODEL", "")
-            if defaults
-            else argparse.SUPPRESS
-        ),
+        default=None if defaults else argparse.SUPPRESS,
         help="Identificador del modelo para chat/clasificación.",
     )
     parser.add_argument(
         "--embedding-model",
-        default=(
-            os.getenv("LM_STUDIO_EMBEDDING_MODEL", "")
-            if defaults
-            else argparse.SUPPRESS
-        ),
+        default=None if defaults else argparse.SUPPRESS,
         help="Identificador del modelo para embeddings vectoriales.",
+    )
+    parser.add_argument(
+        "--embedding-provider",
+        choices=list(PROVIDER_PRESETS.keys()),
+        default=None if defaults else argparse.SUPPRESS,
+        help="Proveedor específico para embeddings si es distinto al de chat.",
+    )
+    parser.add_argument(
+        "--embedding-base-url",
+        default=None if defaults else argparse.SUPPRESS,
+        help="URL base específica para el servidor de embeddings.",
+    )
+    parser.add_argument(
+        "--embedding-api-key",
+        default=None if defaults else argparse.SUPPRESS,
+        help="Clave API específica para el proveedor de embeddings.",
     )
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="epub-archive",
-        description="Extrae, clasifica, agrupa y busca libros EPUB con modelos locales.",
+        description="Extrae, clasifica, agrupa y busca libros EPUB con backends de IA configurables.",
     )
     _add_runtime_options(parser, defaults=True)
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    # Config Command
+    config_parser = subparsers.add_parser(
+        "config",
+        help="Muestra, prueba o guarda la configuración del backend de IA (LM Studio, Ollama, OpenAI, Gemini, etc.).",
+    )
+    _add_runtime_options(config_parser, defaults=False)
+    config_parser.add_argument(
+        "--separate-embedding",
+        dest="separate_embedding",
+        action="store_true",
+        default=None,
+        help="Habilita el uso de un proveedor independiente para los embeddings.",
+    )
+    config_parser.add_argument(
+        "--same-embedding",
+        dest="separate_embedding",
+        action="store_false",
+        default=None,
+        help="Usa el mismo proveedor tanto para chat como para embeddings.",
+    )
+    config_parser.add_argument(
+        "--test",
+        action="store_true",
+        help="Prueba la conexión con el backend configurado y lista los modelos disponibles.",
+    )
+    config_parser.add_argument(
+        "--reset",
+        action="store_true",
+        help="Restablece la configuración por defecto (LM Studio en localhost:1234).",
+    )
 
     # Process Command
     process_parser = subparsers.add_parser(
@@ -146,6 +198,7 @@ def _parser() -> argparse.ArgumentParser:
     manual_parser.add_argument("--description", default="", help="Sinopsis o descripción del libro.")
     manual_parser.add_argument("--original-title", default="", help="Título original.")
     manual_parser.add_argument("--original-author", default="", help="Autor original.")
+
     # Delete Command
     delete_parser = subparsers.add_parser(
         "delete", help="Elimina un libro de la base de datos y opcionalmente del almacenamiento físico."
@@ -173,6 +226,98 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _handle_config_command(args: argparse.Namespace) -> None:
+    if getattr(args, "reset", False):
+        cfg = AIConfig()
+        path = save_ai_config(cfg, args.data_dir)
+        print(f"Configuración de IA restablecida a valores por defecto en: {path}")
+    else:
+        current = load_ai_config(args.data_dir)
+        updated_dict = current.to_dict()
+        changed = False
+
+        if args.provider is not None:
+            updated_dict["provider"] = args.provider
+            if args.base_url is None and args.provider != current.provider:
+                updated_dict["base_url"] = PROVIDER_PRESETS[args.provider]["default_base_url"]
+            changed = True
+        if args.base_url is not None:
+            updated_dict["base_url"] = args.base_url
+            changed = True
+        if args.api_key is not None:
+            updated_dict["api_key"] = args.api_key
+            changed = True
+        if args.chat_model is not None:
+            updated_dict["chat_model"] = args.chat_model
+            changed = True
+        if args.embedding_model is not None:
+            updated_dict["embedding_model"] = args.embedding_model
+            changed = True
+        if getattr(args, "separate_embedding", None) is not None:
+            updated_dict["separate_embedding"] = bool(args.separate_embedding)
+            changed = True
+        if args.embedding_provider is not None:
+            updated_dict["embedding_provider"] = args.embedding_provider
+            updated_dict["separate_embedding"] = True
+            if args.embedding_base_url is None and args.embedding_provider != current.embedding_provider:
+                updated_dict["embedding_base_url"] = PROVIDER_PRESETS[args.embedding_provider]["default_base_url"]
+            changed = True
+        if args.embedding_base_url is not None:
+            updated_dict["embedding_base_url"] = args.embedding_base_url
+            updated_dict["separate_embedding"] = True
+            changed = True
+        if args.embedding_api_key is not None:
+            updated_dict["embedding_api_key"] = args.embedding_api_key
+            changed = True
+
+        cfg = AIConfig.from_dict(updated_dict)
+        if changed:
+            path = save_ai_config(cfg, args.data_dir)
+            print(f"Configuración de IA guardada en: {path}")
+
+    preset_name = PROVIDER_PRESETS.get(cfg.provider, {}).get("name", cfg.provider)
+    emb_preset_name = PROVIDER_PRESETS.get(cfg.embedding_provider, {}).get("name", cfg.embedding_provider)
+
+    print("\n=== CONFIGURACIÓN DE BACKEND DE IA ===")
+    print(f"Archivo config       : {get_config_path(args.data_dir)}")
+    print(f"Proveedor Chat       : {preset_name} ({cfg.provider})")
+    print(f"URL Chat             : {cfg.base_url}")
+    print(f"API Key Chat         : {'Configurada (***)' if cfg.api_key else 'No requerida / vacía'}")
+    print(f"Modelo Chat          : {cfg.chat_model or '(Detección automática)'}")
+    if cfg.separate_embedding:
+        print(f"Embeddings separados : Sí")
+        print(f"Proveedor Embeddings : {emb_preset_name} ({cfg.embedding_provider})")
+        print(f"URL Embeddings       : {cfg.embedding_base_url}")
+        print(f"API Key Embeddings   : {'Configurada (***)' if cfg.embedding_api_key else 'No requerida / vacía'}")
+    else:
+        print(f"Embeddings separados : No (usa el mismo backend de Chat)")
+    print(f"Modelo Embeddings    : {cfg.embedding_model or '(Detección automática)'}")
+    print()
+
+    if getattr(args, "test", False):
+        client = LocalAIClient(config=cfg, data_dir=args.data_dir)
+        print("Probando conexión con el servidor de Chat...")
+        try:
+            models = client._fetch_available_models()
+            rec_chat = client.get_chat_model() if models else "(ninguno)"
+            print(f"  [OK] Conectado a {client.base_url} ({len(models)} modelos detectados)")
+            print(f"  Modelo de chat activo : {rec_chat}")
+            if models:
+                print(f"  Modelos disponibles   : {', '.join(models[:10])}{'...' if len(models) > 10 else ''}")
+        except Exception as exc:
+            print(f"  [ERROR] Falló conexión de Chat: {exc}")
+
+        print("\nProbando conexión con el servidor de Embeddings...")
+        try:
+            emb_models = client._fetch_available_embedding_models()
+            rec_emb = client.get_embedding_model() if emb_models else "(ninguno)"
+            print(f"  [OK] Conectado a {client.embedding_base_url} ({len(emb_models)} modelos detectados)")
+            print(f"  Modelo embeddings activo: {rec_emb}")
+        except Exception as exc:
+            print(f"  [ERROR] Falló conexión de Embeddings: {exc}")
+        print()
+
+
 def main() -> None:
     def _sig_handler(signum, frame):
         raise KeyboardInterrupt
@@ -191,10 +336,27 @@ def main() -> None:
     if args.command == "process" and args.max_books is not None and args.max_books < 1:
         parser.error("--max-books debe ser mayor que cero.")
 
+    if args.command == "config":
+        try:
+            _handle_config_command(args)
+        except (ValueError, RuntimeError) as exc:
+            parser.exit(1, f"Error: {exc}\n")
+        return
+
     storage = None
     try:
         storage = Storage(args.data_dir)
-        ai = LocalAIClient(args.base_url, args.chat_model, args.embedding_model)
+        ai = LocalAIClient(
+            base_url=args.base_url,
+            chat_model=args.chat_model,
+            embedding_model=args.embedding_model,
+            provider=args.provider,
+            api_key=args.api_key,
+            embedding_provider=args.embedding_provider,
+            embedding_base_url=args.embedding_base_url,
+            embedding_api_key=args.embedding_api_key,
+            data_dir=args.data_dir,
+        )
 
         if args.command == "process":
             categories_list = None
@@ -378,4 +540,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

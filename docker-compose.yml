@@ -1,0 +1,41 @@
+services:
+  epub-archive:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: epub-archive:latest
+    container_name: epub-archive
+    restart: unless-stopped
+    privileged: true
+    command: ["npm", "run", "dev", "--", "-p", "3002", "-H", "0.0.0.0"]
+    ports:
+      - "3002:3002"
+    environment:
+      - NODE_ENV=development
+      - PORT=3002
+      - LM_STUDIO_BASE_URL=${LM_STUDIO_BASE_URL:-http://host.docker.internal:1234/v1}
+      - LM_STUDIO_CHAT_MODEL=${LM_STUDIO_CHAT_MODEL:-}
+      - LM_STUDIO_EMBEDDING_MODEL=${LM_STUDIO_EMBEDDING_MODEL:-}
+      - UV_NO_SYNC=1
+      - PYTHONUNBUFFERED=1
+      - WATCHPACK_POLLING=true
+    volumes:
+      - epub_archive_disk:/disk
+      - /Users/josea./Libros:/Users/josea./Libros
+      - ./src:/app/src
+      - ./web/src:/app/web/src
+      - ./web/next.config.ts:/app/web/next.config.ts
+      - ./web/tsconfig.json:/app/web/tsconfig.json
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    tmpfs:
+      - /tmp:size=512m
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+volumes:
+  epub_archive_disk:
+    name: epub_archive_disk_30gb

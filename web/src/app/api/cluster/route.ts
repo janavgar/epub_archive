@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { getArchiveStats } from "@/lib/db";
+import { buildCliAIArgs } from "@/lib/aiConfig";
 
 export async function POST(request: NextRequest) {
   try {
@@ -10,7 +11,8 @@ export async function POST(request: NextRequest) {
     const nClusters = body.n_clusters;
 
     const projectRoot = path.resolve(process.cwd(), "..");
-    const args = ["run", "epub-archive", "cluster"];
+    const aiArgs = buildCliAIArgs();
+    const args = ["run", "epub-archive", ...aiArgs, "cluster"];
 
     if (minClusterSize) {
       args.push("--min-cluster-size", String(minClusterSize));

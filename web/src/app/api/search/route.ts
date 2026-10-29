@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { getDb, parseBookRow, BookDetail } from "@/lib/db";
+import { buildCliAIArgs } from "@/lib/aiConfig";
 
 export async function GET(request: NextRequest) {
   try {
@@ -15,7 +16,8 @@ export async function GET(request: NextRequest) {
     }
 
     const projectRoot = path.resolve(process.cwd(), "..");
-    const args = ["run", "epub-archive", "search", query, "--limit", limit];
+    const aiArgs = buildCliAIArgs();
+    const args = ["run", "epub-archive", ...aiArgs, "search", query, "--limit", limit];
     if (author && author.trim()) {
       args.push("--author", author.trim());
     }

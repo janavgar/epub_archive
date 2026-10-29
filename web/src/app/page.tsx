@@ -184,7 +184,7 @@ function HomeContent() {
         {/* Footer */}
         <footer className="app-footer">
           <p>
-            EPUB Archive Web App • Modelos Locales LM Studio • ChromaDB + SQLite
+            EPUB Archive Web App • Backends de IA Configurables (LM Studio, Ollama, OpenAI, Gemini) • ChromaDB + SQLite
           </p>
         </footer>
       </div>

@@ -163,26 +163,34 @@ class Storage:
         description: str = "",
         chapter_count: int = 0,
     ) -> None:
-        if len(chunks) != len(embeddings):
+        if embeddings and len(chunks) != len(embeddings):
             raise ValueError("El número de fragmentos y embeddings no coincide.")
 
         vector_ids = [str(chunk["id"]) for chunk in chunks]
-        if chunks:
-            self.collection.upsert(
-                ids=vector_ids,
-                embeddings=embeddings,
-                documents=[str(chunk["content"]) for chunk in chunks],
-                metadatas=[
-                    {
-                        "book_id": book_id,
-                        "title": classification["title"],
-                        "author": classification["author"],
-                        "chapter": str(chunk.get("chapter", "")),
-                        "year": str(year),
-                    }
-                    for chunk in chunks
-                ],
-            )
+        if chunks and embeddings:
+            try:
+                self.collection.upsert(
+                    ids=vector_ids,
+                    embeddings=embeddings,
+                    documents=[str(chunk["content"]) for chunk in chunks],
+                    metadatas=[
+                        {
+                            "book_id": book_id,
+                            "title": classification["title"],
+                            "author": classification["author"],
+                            "chapter": str(chunk.get("chapter", "")),
+                            "year": str(year),
+                        }
+                        for chunk in chunks
+                    ],
+                )
+            except Exception as exc:
+                if "dimension" in str(exc).lower():
+                    raise RuntimeError(
+                        f"Incompatibilidad de dimensiones vectoriales en ChromaDB ({exc}). "
+                        "El modelo de embeddings actual genera vectores de distinta dimensión a los ya guardados en la base de datos."
+                    ) from exc
+                raise
 
         self.db.execute("BEGIN")
         try:
@@ -540,12 +548,20 @@ class Storage:
         if author:
             where_filter = {"author": author}
 
-        result = self.collection.query(
-            query_embeddings=[embedding],
-            n_results=limit,
-            where=where_filter,
-            include=["documents", "metadatas", "distances"],
-        )
+        try:
+            result = self.collection.query(
+                query_embeddings=[embedding],
+                n_results=limit,
+                where=where_filter,
+                include=["documents", "metadatas", "distances"],
+            )
+        except Exception as exc:
+            if "dimension" in str(exc).lower():
+                raise RuntimeError(
+                    f"Incompatibilidad de dimensiones en búsqueda vectorial ({exc}). "
+                    "El modelo de embeddings seleccionado no coincide en dimensiones con el índice de ChromaDB."
+                ) from exc
+            raise
         matches = []
         ids = result.get("ids", [[]])[0]
         for index, vector_id in enumerate(ids):
