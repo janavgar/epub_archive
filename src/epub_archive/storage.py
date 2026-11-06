@@ -24,6 +24,7 @@ class Storage:
         self.db = sqlite3.connect(self.db_path)
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA foreign_keys = ON")
+        self.db.execute("PRAGMA temp_store = MEMORY")
         self._init_schema()
 
         client = chromadb.PersistentClient(path=str(data_dir / "chroma"))
@@ -427,9 +428,20 @@ class Storage:
         row = self.db.execute("SELECT id FROM books WHERE id = ?", (book_id,)).fetchone()
         if not row:
             return False
-        self.db.execute("DELETE FROM chunks WHERE book_id = ?", (book_id,))
-        self.db.execute("DELETE FROM books WHERE id = ?", (book_id,))
-        self.db.commit()
+        try:
+            self.db.execute("DELETE FROM chunks WHERE book_id = ?", (book_id,))
+            self.db.execute("DELETE FROM books WHERE id = ?", (book_id,))
+            self.db.commit()
+        except sqlite3.OperationalError as exc:
+            if "full" in str(exc).lower():
+                self.db.rollback()
+                self.db.execute("PRAGMA journal_mode = MEMORY")
+                self.db.execute("PRAGMA temp_store = MEMORY")
+                self.db.execute("DELETE FROM chunks WHERE book_id = ?", (book_id,))
+                self.db.execute("DELETE FROM books WHERE id = ?", (book_id,))
+                self.db.commit()
+            else:
+                raise
         try:
             self.collection.delete(where={"book_id": book_id})
         except Exception:

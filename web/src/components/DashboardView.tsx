@@ -15,6 +15,7 @@ import {
   TrendingUp,
   BookCheck,
   Copy,
+  HardDrive,
 } from "lucide-react";
 import { BookDetail } from "@/lib/db";
 import { NavTab } from "./Navbar";
@@ -49,6 +50,15 @@ export function DashboardView({
   onNavigate,
   onSelectBook,
 }: DashboardViewProps) {
+  const [storageSummary, setStorageSummary] = React.useState<any | null>(null);
+
+  React.useEffect(() => {
+    fetch("/api/storage")
+      .then((r) => r.json())
+      .then((d) => setStorageSummary(d))
+      .catch(() => {});
+  }, []);
+
   if (loading || !stats) {
     return (
       <div style={{ textAlign: "center", padding: "5rem 0", color: "var(--text-secondary)" }}>
@@ -238,6 +248,33 @@ export function DashboardView({
           </div>
           <div className="stat-footer" style={{ display: "flex", alignItems: "center", gap: "0.4rem", color: "#fda4af" }}>
             <span>Gestionar y liberar espacio</span>
+            <ArrowRight size={13} />
+          </div>
+        </div>
+
+        {/* Card 7: Espacio y Bases de Datos */}
+        <div
+          className="stat-card"
+          onClick={() => onNavigate("storage")}
+          style={{ cursor: "pointer", borderLeft: "3px solid #06b6d4" }}
+          title="Ver desglose de espacio de la aplicación, SQLite, ChromaDB y disco disponible"
+        >
+          <div className="stat-header">
+            <span className="stat-label">Espacio y Bases de Datos</span>
+            <div className="stat-icon" style={{ background: "rgba(6, 182, 212, 0.15)", color: "#22d3ee" }}>
+              <HardDrive size={20} />
+            </div>
+          </div>
+          <div>
+            <div className="stat-value" style={{ color: "#67e8f9", fontSize: "1.6rem" }}>
+              {storageSummary?.summary?.totalAppAndDbFormatted || "..."}
+            </div>
+            <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
+              Libre: <strong style={{ color: "#34d399" }}>{storageSummary?.dataVolume?.availableFormatted || "..."}</strong>
+            </span>
+          </div>
+          <div className="stat-footer" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", color: "#67e8f9" }}>
+            <span>SQLite + ChromaDB + App</span>
             <ArrowRight size={13} />
           </div>
         </div>

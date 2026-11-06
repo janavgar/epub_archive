@@ -16,11 +16,12 @@ import {
   Copy,
   Terminal,
   Settings,
+  HardDrive,
 } from "lucide-react";
 import { useProcess } from "./ProcessContext";
 import { AISettingsModal } from "./AISettingsModal";
 
-export type NavTab = "dashboard" | "books" | "duplicates" | "errors" | "search" | "cluster" | "process";
+export type NavTab = "dashboard" | "books" | "duplicates" | "errors" | "search" | "cluster" | "process" | "storage";
 
 interface NavbarProps {
   currentTab: NavTab;
@@ -168,6 +169,12 @@ export function Navbar({ currentTab, onSelectTab, totalBooks, errorBooks, duplic
       label: "Procesador",
       description: "Extracción profunda de EPUBs y vectorización",
       icon: PlayCircle,
+    },
+    {
+      id: "storage",
+      label: "Espacio y BD",
+      description: "Espacio ocupado por SQLite, ChromaDB, app y disco libre",
+      icon: HardDrive,
     },
   ];
 

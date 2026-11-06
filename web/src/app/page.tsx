@@ -9,6 +9,7 @@ import { ClusteringView } from "@/components/ClusteringView";
 import { ProcessView } from "@/components/ProcessView";
 import { ErrorsView } from "@/components/ErrorsView";
 import { DuplicatesView } from "@/components/DuplicatesView";
+import { StorageView } from "@/components/StorageView";
 import { BookDetailModal } from "@/components/BookDetailModal";
 import { ManualBookModal } from "@/components/ManualBookModal";
 import { ProcessProvider } from "@/components/ProcessContext";
@@ -133,6 +134,10 @@ function HomeContent() {
             <ProcessView
               onProcessComplete={refreshStats}
             />
+          )}
+
+          {currentTab === "storage" && (
+            <StorageView />
           )}
         </main>
 

@@ -11,6 +11,7 @@ let dbInstance: DatabaseSync | null = null;
 
 export function ensureSchema(db: DatabaseSync): void {
   try {
+    db.exec("PRAGMA temp_store = MEMORY;");
     db.exec(`
       CREATE TABLE IF NOT EXISTS books (
         id TEXT PRIMARY KEY,
@@ -470,11 +471,19 @@ export function deleteBook(id: string, deleteFile: boolean = false): DeleteBookR
   const book = parseBookRow(bookRow);
   const filePath = book.id;
 
-  // 1. Delete associated chunks from SQLite
-  db.prepare("DELETE FROM chunks WHERE book_id = ?").run(id);
-
-  // 2. Delete book record from SQLite
-  db.prepare("DELETE FROM books WHERE id = ?").run(id);
+  // 1 & 2. Delete associated chunks and book record from SQLite (with fallback to in-memory journal if disk is full)
+  try {
+    db.prepare("DELETE FROM chunks WHERE book_id = ?").run(id);
+    db.prepare("DELETE FROM books WHERE id = ?").run(id);
+  } catch (err: any) {
+    if (String(err?.message || "").toLowerCase().includes("full")) {
+      db.exec("PRAGMA journal_mode = MEMORY; PRAGMA temp_store = MEMORY;");
+      db.prepare("DELETE FROM chunks WHERE book_id = ?").run(id);
+      db.prepare("DELETE FROM books WHERE id = ?").run(id);
+    } else {
+      throw err;
+    }
+  }
 
   // 3. If requested, delete physical file from storage/disk
   let fileDeleted = false;
